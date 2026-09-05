@@ -1,0 +1,37 @@
+[package]
+name = "stillsong"
+version = "0.1.0"
+description = "Stillsong — turn a photo into a song that tells its story"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "stillsong_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+sha2 = "0.10"
+base64 = "0.22"
+image = "0.25"
+win32job = "2"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+id3 = "1"
+
+[profile.release]
+strip = true
+lto = true

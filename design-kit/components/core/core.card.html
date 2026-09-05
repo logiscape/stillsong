@@ -1,0 +1,27 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Core — buttons, icons, badges, panels" subtitle="Brass primary, matte surfaces, Lucide icons" -->
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{background:var(--ground);padding:20px;font:var(--ui-md)}#r{display:block}</style>
+</head><body><div id="r"></div>
+<script type="text/babel">
+const {Icon,Button,IconButton,Badge,Panel,TextField,Select,SegmentedChoice,Switch,Disclosure,PhotoWell,SongCard,Player,LyricSheet,PhotoRoom,StageList,CREATION_STAGES,ProgressBar,Notice,LintList,Dialog}=window.StillsongDesignSystem_4faa75;
+function Row({label,children}){return <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',marginBottom:18}}>
+  <span style={{font:'var(--ui-eyebrow)',letterSpacing:'var(--tracking-eyebrow)',textTransform:'uppercase',color:'var(--text-faint)',width:74}}>{label}</span>{children}</div>}
+function Card(){return <div>
+  <Row label="Buttons"><Button variant="primary" icon="wand-sparkles">Create My Song</Button>
+    <Button variant="secondary">Try again</Button><Button variant="ghost" icon="folder-open">Reveal</Button>
+    <Button variant="quiet">details</Button><Button variant="danger" size="sm" icon="trash-2">Delete</Button>
+    <Button variant="primary" disabled>Create My Song</Button></Row>
+  <Row label="Sizes"><Button size="sm" variant="secondary">Small</Button><Button size="md" variant="secondary">Medium</Button><Button size="lg" variant="primary">Large</Button></Row>
+  <Row label="Icon"><IconButton icon="play" label="Play" variant="brass" size={46}/><IconButton icon="pause" label="Pause" variant="surface"/>
+    <IconButton icon="shuffle" label="Remix"/><IconButton icon="x" label="Close" variant="glass"/></Row>
+  <Row label="Badges"><Badge>slow folk ballad</Badge><Badge mono>2:14</Badge><Badge tone="brass" icon="layers">3 versions</Badge>
+    <Badge tone="glass" icon="audio-lines">Instrumental</Badge><Badge tone="sage" icon="check">Ready</Badge><Badge tone="amber">8 GB</Badge><Badge tone="clay">Failed</Badge></Row>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+    {['matte','inset','glass','solid'].map(v=><Panel key={v} variant={v} pad={14} style={{font:'var(--ui-sm)',color:'var(--text-quiet)'}}>{v}</Panel>)}
+  </div></div>}
+ReactDOM.createRoot(document.getElementById('r')).render(<Card/>);
+</script></body></html>

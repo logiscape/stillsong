@@ -1,0 +1,47 @@
+<!-- @dsCard group="Stillsong app" viewport="1280x820" name="Stillsong — the desktop app" subtitle="Create, Sanctuary, Song view, Remix, first run" -->
+<!-- @startingPoint section="Stillsong app" subtitle="Full click-through app: create, listen, remix" viewport="1280x820" -->
+<!doctype html><html><head><meta charset="utf-8"><title>Stillsong</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>html,body{height:100%}body{padding:0;overflow:hidden}#root{height:100vh}
+@keyframes ss-kenburns{from{transform:scale(1)}to{transform:scale(1.05)}}
+@keyframes ss-breathe{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes ss-drift{0%{left:-38%}100%{left:100%}}
+@keyframes ss-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="AppFrame.jsx"></script>
+<script type="text/babel" src="CreateScreen.jsx"></script>
+<script type="text/babel" src="SanctuaryScreen.jsx"></script>
+<script type="text/babel" src="SongScreen.jsx"></script>
+<script type="text/babel" src="RemixScreen.jsx"></script>
+<script type="text/babel" src="FirstRunScreen.jsx"></script>
+<script type="text/babel" src="SettingsScreen.jsx"></script>
+<script type="text/babel">
+const TITLES={create:"Create",sanctuary:"The Sanctuary",settings:"About Stillsong",song:"",remix:"Remix",firstrun:"Welcome"};
+function App(){
+  const [view,setView]=React.useState("sanctuary");
+  const [song,setSong]=React.useState(null);
+  const [auto,setAuto]=React.useState(false);
+  const chrome=view!=="song"&&view!=="firstrun";
+  return (
+    <AppFrame view={view} onNav={setView} title={view==="song"&&song?song.title:TITLES[view]} chrome={chrome}>
+      {view==="create"&&<CreateScreen onDone={()=>{setSong(window.SS_DATA.SONGS[0]);setAuto(true);setView("song")}}/>}
+      {view==="sanctuary"&&<SanctuaryScreen onCreate={()=>setView("create")}
+        onOpen={s=>{setSong(s);setAuto(false);setView("song")}}/>}
+      {view==="song"&&song&&<SongScreen song={song} autoplay={auto}
+        onBack={()=>setView("sanctuary")} onRemix={()=>setView("remix")}/>}
+      {view==="remix"&&song&&<RemixScreen song={song} onBack={()=>setView("song")}
+        onSubmit={()=>setView("song")}/>}
+      {view==="settings"&&<SettingsScreen/>}
+      {view==="firstrun"&&<FirstRunScreen onFinish={()=>setView("create")}/>}
+      {chrome&&<button onClick={()=>setView("firstrun")} style={{position:"absolute",bottom:14,right:18,background:"none",
+        border:"none",cursor:"pointer",font:"var(--ui-xs)",color:"var(--text-faint)"}}>(demo: first run)</button>}
+    </AppFrame>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>

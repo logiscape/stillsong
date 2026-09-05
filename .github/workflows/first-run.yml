@@ -1,0 +1,42 @@
+# Headless first run through the production Rust code: fetch every pinned
+# runtime artifact (uv, CPython, ComfyUI, llama.cpp, the wheelhouse), extract,
+# sync the Python environment offline with --require-hashes, import torch.
+# Models are skipped (14 GB, and their hashes are checked by the same
+# downloader code this exercises). ~3 GB of downloads; runs only when the
+# manifest or the bootstrap code changes, or on demand.
+name: First run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - components.json
+      - src-tauri/src/manifest.rs
+      - src-tauri/src/downloads.rs
+      - src-tauri/src/components.rs
+      - .github/workflows/first-run.yml
+  pull_request:
+    paths:
+      - components.json
+      - src-tauri/src/manifest.rs
+      - src-tauri/src/downloads.rs
+      - src-tauri/src/components.rs
+      - .github/workflows/first-run.yml
+  workflow_dispatch:
+
+jobs:
+  first-run:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Headless first run (runtime legs, offline Python sync)
+        working-directory: src-tauri
+        env:
+          STILLSONG_E2E_COMPONENTS: ${{ runner.temp }}\stillsong-components
+          STILLSONG_E2E_SKIP_MODELS: "1"
+        run: cargo test first_run_headless -- --nocapture

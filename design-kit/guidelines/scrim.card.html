@@ -1,0 +1,21 @@
+<!-- @dsCard group="Brand" viewport="700x230" name="The legibility ladder" subtitle="Scrim opacity interpolates with photo luminance; text never changes" -->
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>body{background:var(--ground);padding:18px 20px;font:var(--ui-md);color:var(--text-body)}.sw{border-radius:var(--radius-sm);border:1px solid var(--line-1)}.g{display:grid;gap:10px}.n{font:var(--mono-sm);color:var(--text-faint);margin-top:6px;display:block}.l{font:var(--ui-xs);color:var(--text-quiet);display:block}</style>
+</head><body><div class="g" style="grid-template-columns:repeat(4,1fr)"><div><div class="sw" style="position:relative;height:120px;border-radius:var(--radius-photo);overflow:hidden;--photo-lum:.15">
+<img src="https://picsum.photos/seed/stillsong-a/500/400" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div style="position:absolute;inset:0;background:var(--scrim-radial)"></div>
+<span style="position:absolute;left:14px;bottom:14px;right:14px;font:var(--lyric-sm);color:var(--lyric-text)">the rain keeps<br>its own time</span></div>
+<span class="n">dark photo · α .49</span></div><div><div class="sw" style="position:relative;height:120px;border-radius:var(--radius-photo);overflow:hidden;--photo-lum:.5">
+<img src="https://picsum.photos/seed/stillsong-b/500/400" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div style="position:absolute;inset:0;background:var(--scrim-radial)"></div>
+<span style="position:absolute;left:14px;bottom:14px;right:14px;font:var(--lyric-sm);color:var(--lyric-text)">the rain keeps<br>its own time</span></div>
+<span class="n">mid photo · α .65</span></div><div><div class="sw" style="position:relative;height:120px;border-radius:var(--radius-photo);overflow:hidden;--photo-lum:.85">
+<img src="https://picsum.photos/seed/stillsong-c/500/400" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div style="position:absolute;inset:0;background:var(--scrim-radial)"></div>
+<span style="position:absolute;left:14px;bottom:14px;right:14px;font:var(--lyric-sm);color:var(--lyric-text)">the rain keeps<br>its own time</span></div>
+<span class="n">light photo · α .81</span></div><div><div class="sw" style="position:relative;height:120px;border-radius:var(--radius-photo);overflow:hidden;--photo-lum:1">
+<img src="https://picsum.photos/seed/solid/500/400" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+<div style="position:absolute;inset:0;background:var(--panel-solid-bg)"></div>
+<span style="position:absolute;left:14px;bottom:14px;right:14px;font:var(--lyric-sm);color:var(--lyric-text)">the rain keeps<br>its own time</span></div>
+<span class="n">solid panel mode</span></div></div>
+<span class="n" style="margin-top:10px">--scrim-alpha = .42 + luminance × .46 · AA (4.5:1) guaranteed at worst case · layer 2 adds backdrop blur, layer 3 is the opaque fallback</span></body></html>

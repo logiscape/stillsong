@@ -1,0 +1,16 @@
+:root{
+  --space-0:0px;--space-1:2px;--space-2:4px;--space-3:8px;--space-4:12px;
+  --space-5:16px;--space-6:24px;--space-7:32px;--space-8:48px;--space-9:64px;
+  --space-10:96px;--space-11:128px;
+
+  --gutter-screen:48px;      /* app frame inset */
+  --gutter-panel:24px;       /* inside cards & panels */
+  --gutter-field:12px;       /* inside inputs */
+  --grid-gap:20px;           /* Sanctuary grid */
+  --measure-lyric:34ch;      /* lyric column */
+  --measure-prose:62ch;
+  --rail-width:280px;
+  --control-h:40px;
+  --control-h-lg:48px;
+  --hit-min:44px;
+}

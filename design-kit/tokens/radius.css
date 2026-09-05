@@ -1,0 +1,9 @@
+:root{
+  --radius-xs:3px;
+  --radius-sm:6px;
+  --radius-md:10px;
+  --radius-lg:14px;
+  --radius-xl:20px;
+  --radius-photo:12px;   /* photo cards & the photo well */
+  --radius-pill:999px;
+}

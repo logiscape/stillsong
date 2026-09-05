@@ -1,0 +1,130 @@
+// The ONLY way the engine touches the outside world. Adapters wire these to
+// Tauri; tests inject in-process fakes.
+
+export interface Db {
+  execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number }>;
+  select<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+}
+
+export interface HttpResponse {
+  status: number;
+  /** Response body as text (JSON endpoints) — binary downloads go through FileStore.download. */
+  body: string;
+}
+
+export interface HttpTransport {
+  get(url: string): Promise<HttpResponse>;
+  /**
+   * `timeoutMs` overrides the transport's default (120 s in the Tauri shell)
+   * for requests that legitimately take minutes — a non-streaming LLM
+   * completion sends nothing until generation finishes.
+   */
+  postJson(url: string, body: unknown, timeoutMs?: number): Promise<HttpResponse>;
+}
+
+export type WsEventHandler = (msg: { kind: 'message'; data: string } | { kind: 'open' } | { kind: 'close' }) => void;
+
+export interface WsTransport {
+  /** Opens a socket; returns an id used to close it. Reconnection is the caller's job. */
+  connect(url: string, onEvent: WsEventHandler): Promise<string>;
+  close(id: string): Promise<void>;
+}
+
+export interface ThumbnailInfo {
+  /** Absolute path of the generated thumbnail. */
+  path: string;
+  /** Average luminance of the image, 0 (black) .. 1 (white). Drives the lyric scrim. */
+  luminance: number;
+  /** Dominant colour as #rrggbb. Drives the ambient wash. */
+  dominantColor: string;
+}
+
+export interface FileStore {
+  /** Streams a URL to a file under the app library dir; returns the absolute path. */
+  download(url: string, relPath: string): Promise<string>;
+  /** Copies a file into the library; returns the absolute destination path. */
+  importFile(srcPath: string, relPath: string): Promise<string>;
+  /** Writes base64-decoded bytes into the library (in-memory content, e.g. a canvas drawing); returns the absolute path. */
+  writeBase64(relPath: string, b64: string): Promise<string>;
+  /** Renders a downscaled thumbnail into the library and measures luminance + dominant colour. */
+  makeThumbnail(srcPath: string, relPath: string, maxDim: number): Promise<ThumbnailInfo>;
+  sha256(path: string): Promise<string>;
+  readBase64(path: string): Promise<string>;
+  exists(path: string): Promise<boolean>;
+  /** Deletes a file; missing files are not an error. */
+  remove(path: string): Promise<void>;
+  /** Opens the OS file manager with the file selected. */
+  reveal(path: string): Promise<void>;
+  libraryDir(): Promise<string>;
+}
+
+export interface Clock {
+  now(): number;
+  setTimeout(fn: () => void, ms: number): () => void; // returns cancel
+}
+
+/** Supervisor process liveness (not readiness — the engine health-probes for that). */
+export type ServiceState = 'stopped' | 'running' | 'error';
+
+/**
+ * Command surface of the runtime supervisor, which owns the child processes
+ * (ComfyUI and llama-server) and their addresses. `stopLlm` resolves only when
+ * the llama-server process has actually exited — that exit is what guarantees
+ * the GPU is clear for a render. In dev mode the adapter may point at
+ * externally managed services instead.
+ */
+export interface HardwareInfo {
+  vendor: string;
+  vramMb: number;
+  ramMb: number;
+}
+
+/** One file under the supervised ComfyUI's output dir, in /history's `{filename, subfolder}` shape. */
+export interface ComfyOutputRef {
+  filename: string;
+  /** Relative to the output root; either slash style (ComfyUI's history uses backslashes on Windows). */
+  subfolder: string;
+}
+
+export interface Runtime {
+  status(): Promise<{ comfy: ServiceState; llm: ServiceState }>;
+  startLlm(): Promise<void>;
+  stopLlm(): Promise<void>;
+  /**
+   * Ensure ComfyUI is up (spawn or crash-restart as needed), resolving once it
+   * answers health checks. Cheap when already running. Without this on the
+   * render path, a mid-session ComfyUI death is permanent: the supervisor's
+   * restart-once logic exists but nothing would ever invoke it.
+   */
+  startComfy(): Promise<void>;
+  urls(): Promise<{ comfy: string; llm: string }>;
+  hardware(): Promise<HardwareInfo>;
+  /**
+   * Every file ComfyUI has written under the supervised instance's output
+   * dir (comfy-data/output). The engine copies each render into the library
+   * at harvest, so what's left here is disposable; this is what the startup
+   * orphan sweep reads. An externally managed dev ComfyUI's output tree is
+   * not visible (and not ours to touch).
+   */
+  comfyOutputs(): Promise<ComfyOutputRef[]>;
+  /** Deletes one file under the supervised output dir; missing files are not an error. */
+  removeComfyOutput(file: ComfyOutputRef): Promise<void>;
+}
+
+export interface Ports {
+  db: Db;
+  http: HttpTransport;
+  ws: WsTransport;
+  files: FileStore;
+  clock: Clock;
+  runtime: Runtime;
+}
+
+export function newId(): string {
+  // UUID v4 without dashes — TEXT primary keys, generated by callers.
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Song view" description="Photo as the room: adaptive scrim, typeset lyric sheet, glass transport" -->
+<helmet><script src="./ds-base.js"></script><style>@keyframes ss-kenburns{from{transform:scale(1)}to{transform:scale(1.05)}}</style></helmet>
+<div style="position:relative;width:100%;height:100vh;overflow:hidden;background:#0A0908;font:400 15px/1.5 'Source Sans 3',sans-serif">
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.PhotoRoom" photo="https://picsum.photos/seed/stillsong-harbour/1600/1000" luminance="{{ luminance }}" scrim="vertical" hint-size="100%,100vh">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;gap:10px;padding:18px 22px">
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.IconButton" icon="chevron-left" label="Close" variant="glass" hint-size="40px,40px"></x-import>
+<div style="flex:1"></div>
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.IconButton" icon="shuffle" label="Remix" variant="glass" hint-size="40px,40px"></x-import>
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.IconButton" icon="ellipsis" label="More" variant="glass" hint-size="40px,40px"></x-import>
+</div>
+<div style="flex:1;min-height:0;display:flex;align-items:center;padding:0 48px">
+<div style="max-width:520px;max-height:100%;overflow-y:auto">
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.LyricSheet" title="{{ title }}" stanzas="{{ stanzas }}" mode="{{ panelMode }}" hint-size="480px,360px"></x-import>
+</div>
+</div>
+<div style="padding:0 48px 26px">
+<x-import component-from-global-scope="StillsongDesignSystem_4faa75.Player" playing="{{ playing }}" position="{{ position }}" duration="{{ duration }}" volume="0.75" onToggle="{{ toggle }}" onSeek="{{ seek }}" hint-size="640px,70px" style="max-width:640px"></x-import>
+</div>
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Harbour, Nearly Dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;lyrics&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;luminance&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.28,&quot;min&quot;:0,&quot;max&quot;:1,&quot;step&quot;:0.02,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Legibility&quot;},&quot;solidPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Legibility&quot;},&quot;duration&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:134,&quot;min&quot;:30,&quot;max&quot;:600,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { playing: false, position: 38 };
+  componentDidMount(){ this.t = setInterval(()=>{ if(this.state.playing) this.setState(s=>({position:Math.min(this.props.duration ?? 134, s.position+1)})) }, 1000) }
+  componentWillUnmount(){ clearInterval(this.t) }
+  renderVals(){
+    const raw = this.props.lyrics ?? "The gate stays open all evening\nand the rain keeps its own time\n\nWe counted the boats twice\nthen stopped counting\nand let the light go\n\nNearly dark, nearly home —\nthe water holds what's left of the day";
+    return {
+      title: this.props.title ?? "Harbour, Nearly Dark",
+      stanzas: raw.split(/\n\s*\n/),
+      luminance: this.props.luminance ?? 0.28,
+      panelMode: this.props.solidPanel ? "solid" : "blur",
+      duration: this.props.duration ?? 134,
+      playing: this.state.playing,
+      position: this.state.position,
+      toggle: () => this.setState(s=>({playing:!s.playing})),
+      seek: (sec) => this.setState({position:sec})
+    };
+  }
+}
+</script>
+</body>
+</html>

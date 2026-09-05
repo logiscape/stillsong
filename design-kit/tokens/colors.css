@@ -1,0 +1,73 @@
+:root{
+  /* --- Ground: warm near-dark. The gallery at dusk. --- */
+  --ground:#100E0D;
+  --ground-deep:#0A0908;
+  --surface-1:#1A1716;
+  --surface-2:#221E1C;
+  --surface-3:#2C2724;
+  --surface-4:#383129;
+  --surface-inset:#0E0C0B;
+
+  /* --- Warm neutrals for text --- */
+  --ink-1:#F5EEE6;
+  --ink-2:#CBBFB4;
+  --ink-3:#9A8F86;
+  --ink-4:#6E645D;
+  --ink-inverse:#171412;
+
+  /* --- Hairlines & washes (matte museum wall) --- */
+  --line-1:rgba(245,238,230,.09);
+  --line-2:rgba(245,238,230,.16);
+  --line-3:rgba(245,238,230,.28);
+  --wash-1:rgba(245,238,230,.04);
+  --wash-2:rgba(245,238,230,.07);
+  --wash-3:rgba(245,238,230,.12);
+
+  /* --- The single warm metallic accent: brass --- */
+  --brass-100:#F0DDBE;
+  --brass-200:#E2C79B;
+  --brass-300:#CFAC79;
+  --brass:#C0975F;
+  --brass-600:#A57C48;
+  --brass-700:#7E5C34;
+  --brass-800:#523B22;
+  --brass-wash:rgba(192,151,95,.14);
+  --brass-line:rgba(192,151,95,.38);
+
+  /* --- Semantics: muted, pigment-like --- */
+  --sage:#7F9A76;
+  --sage-wash:rgba(127,154,118,.15);
+  --amber:#CE9B45;
+  --amber-wash:rgba(206,155,69,.15);
+  --clay:#B4664C;
+  --clay-wash:rgba(180,102,76,.16);
+
+  /* --- Ambient: set per-photo at import from the dominant colour --- */
+  --ambient:#3A2F28;
+  --ambient-soft:rgba(58,47,40,.5);
+
+  /* --- Semantic aliases (use these in components) --- */
+  --text-title:var(--ink-1);
+  --text-body:var(--ink-2);
+  --text-quiet:var(--ink-3);
+  --text-faint:var(--ink-4);
+  --text-accent:var(--brass-200);
+  --text-on-accent:var(--ink-inverse);
+
+  --bg-app:var(--ground);
+  --surface-card:var(--surface-1);
+  --surface-card-hover:var(--surface-2);
+  --surface-raised:var(--surface-2);
+  --surface-field:var(--surface-inset);
+  --surface-overlay:rgba(16,14,13,.86);
+
+  --border-hairline:var(--line-1);
+  --border-field:var(--line-2);
+  --border-strong:var(--line-3);
+  --border-selected:var(--brass-line);
+
+  --focus-ring:var(--brass-300);
+  --danger:var(--clay);
+  --success:var(--sage);
+  --warning:var(--amber);
+}

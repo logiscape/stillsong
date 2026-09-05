@@ -1,0 +1,9 @@
+node_modules/
+dist/
+src-tauri/target/
+*.local
+CLAUDE.local.md
+.DS_Store
+
+# release-time Python lock work dir (scripts/lock-python.mjs)
+.lock-work/

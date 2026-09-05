@@ -1,0 +1,9 @@
+html,body{margin:0}
+body{background:var(--bg-app);color:var(--text-body);font:var(--ui-md);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+*,*::before,*::after{box-sizing:border-box}
+::selection{background:var(--brass-wash);color:var(--ink-1)}
+a{color:var(--brass-200);text-decoration-color:var(--brass-line);text-underline-offset:3px}
+a:hover{color:var(--brass-100);text-decoration-color:var(--brass-200)}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-xs)}
+button,input,select,textarea{font:inherit;color:inherit}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}}

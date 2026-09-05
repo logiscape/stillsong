@@ -1,0 +1,39 @@
+/* Stillsong design system — single stylesheet entry. Tokens come from the
+   Twilight Gallery design kit; components style themselves inline from the
+   tokens. */
+
+@import url("./tokens/fonts.css");
+@import url("./tokens/colors.css");
+@import url("./tokens/typography.css");
+@import url("./tokens/spacing.css");
+@import url("./tokens/radius.css");
+@import url("./tokens/elevation.css");
+@import url("./tokens/motion.css");
+@import url("./tokens/scrim.css");
+@import url("./tokens/base.css");
+
+html, body, #root { height: 100%; }
+body { overflow: hidden; }
+
+/* Soft scrollbars everywhere: a slim warm pill on a transparent track, so the
+   bar recedes like the rest of the chrome (esp. over photos in the Song view). */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 238, 230, 0.14);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 238, 230, 0.28);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Motion vocabulary (disabled globally by base.css under prefers-reduced-motion). */
+@keyframes ss-kenburns { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes ss-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes ss-drift { 0% { left: -38%; } 100% { left: 100%; } }
+@keyframes ss-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

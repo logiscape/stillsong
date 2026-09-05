@@ -1,0 +1,41 @@
+/* The legibility system (design brief §5.3).
+   Text colour never changes; the scrim does. Photo luminance L (0..1) is measured at
+   import and written to --photo-lum; --scrim-alpha interpolates from it. */
+:root{
+  --photo-lum:.5; /* @kind other */
+  /* .42 over a dark photo -> .88 over a white one */
+  --scrim-alpha:calc(.42 + (var(--photo-lum) * .46)); /* @kind other */
+  --scrim-alpha-strong:calc(.58 + (var(--photo-lum) * .38)); /* @kind other */
+  --scrim-color:8,7,6;
+
+  /* layer 1: vertical scrim anchored to the lyric column */
+  --scrim-vertical:linear-gradient(to bottom,
+    rgba(var(--scrim-color),calc(var(--scrim-alpha) * .55)) 0%,
+    rgba(var(--scrim-color),var(--scrim-alpha)) 38%,
+    rgba(var(--scrim-color),var(--scrim-alpha)) 100%);
+  /* layer 1b: radial scrim for centred overlays */
+  --scrim-radial:radial-gradient(120% 90% at 30% 50%,
+    rgba(var(--scrim-color),var(--scrim-alpha-strong)) 0%,
+    rgba(var(--scrim-color),calc(var(--scrim-alpha) * .5)) 62%,
+    rgba(var(--scrim-color),calc(var(--scrim-alpha) * .28)) 100%);
+  /* chrome protection at the edges */
+  --scrim-chrome-top:linear-gradient(to bottom,rgba(var(--scrim-color),.72),rgba(var(--scrim-color),0));
+  --scrim-chrome-bottom:linear-gradient(to top,rgba(var(--scrim-color),.86),rgba(var(--scrim-color),0));
+
+  /* layer 2: blurred panel behind the lyric column */
+  --panel-blur-bg:rgba(var(--scrim-color),.34);
+  --panel-blur:var(--blur-panel); /* @kind other */
+
+  /* layer 3: solid-panel accessibility mode */
+  --panel-solid-bg:#0C0B0A;
+
+  --lyric-text:var(--ink-1);        /* fixed. never inverts. */
+  --lyric-text-quiet:rgba(245,238,230,.66);
+}
+@media (prefers-contrast:more){
+  :root{
+    --panel-blur-bg:var(--panel-solid-bg);
+    --panel-blur:none; /* @kind other */
+    --scrim-alpha:.92; /* @kind other */
+  }
+}

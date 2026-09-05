@@ -1,0 +1,17 @@
+:root{
+  --dur-tap:110ms; /* @kind other */
+  --dur-fast:180ms; /* @kind other */
+  --dur-base:280ms; /* @kind other */
+  --dur-slow:520ms; /* @kind other */
+  --dur-reveal:880ms; /* @kind other */    /* the title reveal */
+  --dur-breath:6200ms; /* @kind other */   /* ambient pulse while the studio works */
+  --dur-kenburns:150s; /* @kind other */
+
+  --ease-out:cubic-bezier(.2,.8,.24,1); /* @kind other */
+  --ease-in-out:cubic-bezier(.4,0,.2,1); /* @kind other */
+  --ease-serene:cubic-bezier(.32,.06,.24,1); /* @kind other */
+  --ease-lift:cubic-bezier(.16,.84,.44,1); /* @kind other */
+
+  --hover-lift:translateY(-2px); /* @kind other */
+  --press-scale:scale(.985); /* @kind other */
+}
