@@ -183,7 +183,7 @@ alongside a standalone ComfyUI that is also rendering.
 `npm run test:live` runs the end-to-end suite against a real ComfyUI on
 `:8000` (short draft renders, a few minutes). `scripts\dev-comfy.ps1` launches
 the components copy of ComfyUI standalone with the same interpreter and flags
-the supervisor uses. See [CLAUDE.md](CLAUDE.md) for the engineering notes,
+the supervisor uses. See [AGENTS.md](AGENTS.md) for the engineering notes,
 including the measured facts about the music model that the code depends on.
 
 ### Repository layout
