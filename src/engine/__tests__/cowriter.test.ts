@@ -2,7 +2,7 @@
 // [intro]…[outro], [solo] at the peaks, [instrumental] everywhere else.
 
 import { describe, expect, it } from 'vitest';
-import { instrumentalSkeleton } from '@engine/cowriter/cowriter';
+import { NO_GENRE_HINT, composeUserMessage, instrumentalSkeleton } from '@engine/cowriter/cowriter';
 import { INSTRUMENTAL_EXAMPLES, VOCAL_EXAMPLES, analysisPrompt, captionGuide, fewShot } from '@engine/cowriter/guides';
 import { estimateSeconds } from '@engine/cowriter/lyrics';
 import { lintLyrics } from '@engine/cowriter/linter';
@@ -30,6 +30,18 @@ describe('instrumentalSkeleton', () => {
       // The estimate lands in the target's neighbourhood (15 s per tag).
       expect(estimateSeconds(skeleton)).toBeGreaterThanOrEqual(target * 0.75);
     }
+  });
+});
+
+describe('compose controls', () => {
+  const base = { idea: '', durationSec: 120, instrumental: false, vocalPref: 'any' as const };
+
+  it('nudges toward a secondary influence only when the user gave no genre', () => {
+    expect(composeUserMessage(base)).toContain(NO_GENRE_HINT);
+    expect(composeUserMessage({ ...base, genreHint: '  ' })).toContain(NO_GENRE_HINT);
+    const hinted = composeUserMessage({ ...base, genreHint: 'dark folk' });
+    expect(hinted).toContain('Genre / mood hint: dark folk.');
+    expect(hinted).not.toContain(NO_GENRE_HINT);
   });
 });
 
@@ -107,6 +119,9 @@ describe('split analysis prompt (photo vs drawing)', () => {
       expect(p.match(/Visible text: any readable text VERBATIM/g)).toHaveLength(1);
       expect(p.match(/Mood words: 5-8 evocative words/g)).toHaveLength(1);
       expect(p.match(/Song angles: three different angles/g)).toHaveLength(1);
+      // The card describes the picture; the genre is the songwriter's call in the compose pass (a genre in the card overrides the user's hint).
+      expect(p.match(/Name no genre, style, tempo or instruments/g)).toHaveLength(1);
+      expect(p).not.toMatch(/ballad/);
       expect(p.match(/No preamble\./g)).toHaveLength(1);
     }
   });

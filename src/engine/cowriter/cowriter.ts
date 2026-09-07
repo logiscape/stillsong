@@ -167,7 +167,16 @@ export function instrumentalSkeleton(durationSec: number): string {
   return tags.join('\n');
 }
 
-function composeUserMessage(req: CowriteRequest, photoCard?: string): string {
+/**
+ * Shown only when the user gave no genre: a nudge toward a specific sound
+ * when the story earns it, never a rule to avoid common genres. A user hint
+ * replaces it outright so the two can never pull against each other.
+ */
+export const NO_GENRE_HINT =
+  'No genre was requested: choose the one that best serves the story, and if it fits the story, consider adding a secondary influence to the genre (e.g. folk ballad with a cinematic orchestral influence).';
+
+/** Exported for tests. */
+export function composeUserMessage(req: CowriteRequest, photoCard?: string): string {
   const parts: string[] = [];
   const isDrawing = req.photo?.source === 'drawing';
   if (photoCard) {
@@ -194,6 +203,7 @@ function composeUserMessage(req: CowriteRequest, photoCard?: string): string {
   } else if (req.vocalPref === 'female') controls.push('Lead vocal: female.');
   else if (req.vocalPref === 'male') controls.push('Lead vocal: male.');
   if (req.genreHint?.trim()) controls.push(`Genre / mood hint: ${req.genreHint.trim()}.`);
+  else controls.push(NO_GENRE_HINT);
   if (req.language?.trim() && !/^english$/i.test(req.language.trim())) {
     controls.push(`Lyrics language: ${req.language.trim()} (keep the section tags and the caption in English).`);
   }

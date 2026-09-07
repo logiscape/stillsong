@@ -80,38 +80,61 @@ export function captionGuide(instrumental: boolean): string {
 // Each entry starts with its parenthetical descriptor, then Caption/Lyrics.
 
 export const VOCAL_EXAMPLES: readonly string[] = [
-  `(vocal, acoustic)
+  `(vocal, dark folk)
 Caption:
-Global Metadata: Acoustic folk, singer-songwriter, with a faint Americana lean. Slow, around 72 bpm, key is C, scale is minor. Opens solitary and contemplative, deepens through the vocal performance rather than added instruments, and ends stripped back with a sense of quiet, unresolved longing. Late-night listening by a rain-streaked window. Narrow, centred soundstage; warm mid-range focus with a natural high roll-off; breathable dynamics with no heavy compression, raw nuances preserved.
-Vocal Details: Male lead, textured, slightly raspy baritone with an earthy, weary warmth. Conversational storytelling delivery in the verses, soft and breathy; opens into resonant chest voice on the chorus lines; returns to a near-whisper at the end. No backing vocals. Subtle short-room reverb, no audible delay or pitch correction.
-Arrangement: Intro: a lone steel-string acoustic guitar finger-picks a slow arpeggio, room ambience audible, string squeaks left in. Verse: guitar keeps the picking pattern under the vocal, thumb slaps on the low strings marking a soft pulse like a kick. Chorus: strumming widens, body taps add a snare-like accent, the vocal lifts; still only guitar and voice. Verse: back to picking, quieter. Chorus: fuller strum, a touch more force in the right hand. Bridge: guitar thins to single sustained notes, long decays, vocal almost spoken. Outro: the opening arpeggio returns, slows, and rings out on a final unresolved chord.
+Global Metadata: Dark Folk with a heavy cinematic and medieval influence. Tempo is a slow, deliberate 65 bpm. Key is B minor. The emotional arc begins with a sense of eerie, frozen anticipation and builds into a sweeping, tragic majesty before receding into a hollow, haunting silence. Listening scenario: A desolate, overgrown ruin at twilight. The production profile features a wide, atmospheric soundstage with a deep, resonant low-end and a bright, crystalline high-end to capture the sharp textures of the steel.
+Vocal Details: Female lead, a deep and resonant baritone with a slight gravelly texture, evocative of a medieval bard. The delivery is intimate and hushed in the verses, moving into a powerful, operatic belt during the chorus. Backing vocals include low-register male humming and ethereal, distant choral textures that provide a sense of ancient scale. Subtle reverb creates a cathedral-like space for the voice.
+Arrangement: Intro: A low, vibrating drone synth is layered with a mourning, weeping cello to establish a chilling, medieval atmosphere. Verse: A sparse, finger-picked acoustic guitar provides a rhythmic pulse, accompanied by a muffled, heartbeat-like percussion that mimics a slow pulse. Pre-Chorus: A haunting woodwind melody (reminiscent of an oboe) enters, joined by swelling, low-register strings that build a sense of impending movement. Chorus: A massive orchestral explosion occurs, featuring heavy, distorted cellos, a deep cinematic drum hit on every downbeat, and a soaring, tragic string section; the mood shifts to one of epic, tragic grandeur. Verse: Instrumentation thins back to the acoustic guitar and a subtle, rhythmic mechanical clicking sound, creating a sense of industrial decay. Chorus: Similar to the first, but with more prominent string layers and a fuller choral backing to increase the emotional weight. Bridge: The music slows significantly, focusing on a grinding stone-like texture and a rhythmic, chanted vocal style that feels like an ancient incantation. Solo: A weeping, high-register violin plays a tragic, soaring melody over a dark, driving beat that maintains the momentum. Chorus: A final, climactic peak with full orchestral weight, featuring a powerful choral finish that reaches a peak before falling away. Outro: The heavy instruments cut out suddenly, leaving only a single, decaying cello note and the ambient sound of a cold wind blowing through iron.
 Lyrics:
 [intro]
 [verse]
-Rain keeps time on the window glass
-Every drop a year gone past
-I left the porch light on for you
-Same as I always do
+Iron ribs against the gray
+Waiting for the break of day
+Pillars of jade, deep and cold
+Watching the secrets of the old
+The pond is glass, a mirror's face
+Holding the ghosts of a hollow place
+[pre-chorus]
+The wind is a whisper, a dying breath
+A dance of life, a shadow of death
 [chorus]
-Come home by the river road
-Lay down what you carried, let it go
-I'll be here when the water's low
-Come home by the river road
+Rise, oh titan of the steel
+Broken spine that will never feel
+Spinning in the sun, a crown of fire
+A monument to a lost desire
+The skeleton waits, the sky is wide
+Nowhere for the soul to hide
 [verse]
-Your coat still hangs beside the door
-I don't need it there anymore
-But I can't seem to take it down
-Not in this quiet town
+Veins of gold and blood-red lines
+Twisting through the ancient pines
+The buds are waking, the winter's done
+But the beast remains, beneath the sun
+Silence reigns in the empty hall
+Waiting for the summer's call
 [chorus]
-Come home by the river road
-Lay down what you carried, let it go
-I'll be here when the water's low
-Come home by the river road
+Rise, oh titan of the steel
+Broken spine that will never feel
+Spinning in the sun, a crown of fire
+A monument to a lost desire
+The skeleton waits, the sky is wide
+Nowhere for the soul to hide
 [bridge]
-If the river rises, I'll still wait
-Some things don't know how to be late
+The gears are frozen, the heart is still
+Locked in a cage of iron will
+Wait for the fall
+Wait for the rise
+[solo]
+[chorus]
+Rise, oh titan of the steel
+Broken spine that will never feel
+Spinning in the sun, a crown of fire
+A monument to a lost desire
+The skeleton waits, the sky is wide
+Nowhere for the soul to hide
 [outro]
-Mmm...`,
+Still it stands
+Still it waits
+Mm...`,
   `(vocal, cinematic folk ballad)
 Caption:
 Global Metadata: Folk ballad with a cinematic orchestral influence. Mid-tempo, around 74 bpm. Key is E major. The emotional arc moves from heavy, weary reflection to a soaring, majestic sense of peace. Listening scenario: A quiet evening by a hearth or a cinematic fantasy scene. Production profile features a wide, warm soundstage with organic textures, rich hall reverb, and high dynamic range.
@@ -231,7 +254,7 @@ const ANALYSIS_CARD_INTRO = `Write a compact "songwriter's reference card" in pl
 const ANALYSIS_TEXT_LINE = `Visible text: any readable text VERBATIM in quotes, or "none".`;
 const ANALYSIS_MOOD_LINE = `Mood words: 5-8 evocative words.`;
 const analysisAnglesLine = (subject: 'photo' | 'drawing') =>
-  `Song angles: three different angles a song about this ${subject} could take (one line each, e.g. "1. A nostalgic ballad from the point of view of ...").`;
+  `Song angles: three different angles a song about this ${subject} could take, each a story, point of view or feeling to sing about (one line each, e.g. "1. From the point of view of ..."). Name no genre, style, tempo or instruments: the music is the songwriter's decision in the next step, not the ${subject}'s.`;
 const ANALYSIS_IMAGINATIVE = `be imaginative only in the Story and Song angles lines. No preamble.`;
 
 /** The per-source vision prompt. `source` is always known before the first analysis. */
