@@ -8,7 +8,7 @@
 import { newId, type Ports } from './ports';
 import { migrate } from './migrations';
 import type { Job, PhotoAsset, Song, SongSpec, VocalPref } from './domain/types';
-import { AUDIO_FRAMES_PER_SECOND, CAP, DURATION, defaultSpec, randomSeed } from './domain/types';
+import { AUDIO_FRAMES_PER_SECOND, CAP, DURATION, RENDER_STEPS, canEnhance, defaultSpec, randomSeed } from './domain/types';
 import { validateSpec, type ValidationIssue } from './domain/validate';
 import { capCeiling, hardwareTier, renderCap, type HardwareTier } from './domain/duration';
 import type { HardwareInfo } from './ports';
@@ -121,6 +121,7 @@ export class Engine {
     engine.capCeilingSec = capCeiling(engine.hardware.vramMb);
     engine.hasStillsongEncode = await comfy.hasNode('StillsongMusic3TextEncode');
     await engine.recoverInFlight();
+    await engine.finishReplacements().catch(() => {});
     // After recovery so an in-flight render being harvested on this boot is
     // never mistaken for an orphan (its song row exists either way).
     void engine.sweepComfyOutputs().catch(() => {});
@@ -222,6 +223,7 @@ export class Engine {
         durationSec: renderCap(targetSec, result.lyrics, this.capCeilingSec),
         seed: randomSeed(),
         tiledDecode: this.settings.tiledDecode,
+        steps: RENDER_STEPS[this.settings.renderMethod],
         quality: this.settings.quality,
         vocalPref: req.vocalPref as VocalPref,
         genreHint: req.genreHint?.trim() || undefined,
@@ -246,16 +248,39 @@ export class Engine {
    * Validates, persists, enqueues, and kicks the runner. `prefix` asks the
    * render to teacher-force another song's saved composition ("Let it finish",
    * same-seed lyric edits); it degrades to a free render when the codes or the
-   * overlay node are unavailable.
+   * overlay node are unavailable. `replacesSongId` marks an "Enhance quality"
+   * re-take: on harvest it takes that song's place instead of becoming a version.
    */
-  async enqueueSong(spec: SongSpec, parentId?: string, prefix?: RenderPrefix): Promise<Song> {
+  async enqueueSong(spec: SongSpec, parentId?: string, prefix?: RenderPrefix, replacesSongId?: string): Promise<Song> {
     const errors = validateSpec(spec).filter((i) => i.severity === 'error');
     if (errors.length) throw new Error(errors.map((e) => e.message).join(' '));
-    const song = await this.songs.create(spec, this.ports.clock.now(), parentId, 'queued', prefix);
+    const song = await this.songs.create(spec, this.ports.clock.now(), parentId, 'queued', prefix, replacesSongId);
     await this.jobs.enqueue(song.id, this.ports.clock.now());
     this.emit({ kind: 'queue_changed' });
     void this.pump();
     return song;
+  }
+
+  /**
+   * "Enhance quality": re-render a song at the 'enhanced' step count and swap
+   * it in for the original. Only the sampler changes — same seed, same cap,
+   * and the saved composition is teacher-forced in full when it exists — so
+   * the result is the same performance with a cleaner audio pass. The
+   * composing stage still runs (the sampler consumes the composer's live
+   * hidden states, which are never stored), so this costs about what the
+   * original render did, plus the extra steps.
+   */
+  async enhanceSong(songId: string): Promise<Song> {
+    const song = await this.songs.byId(songId);
+    if (!song) throw new Error('That song is no longer here.');
+    if (!canEnhance(song)) throw new Error('This song is already at its best.');
+    // The original stays listed (and enhanceable-looking) until the re-take
+    // lands; a second request would leave two 80-step copies behind.
+    const pending = await this.songs.pendingReplacementOf(song.id);
+    if (pending) return pending;
+    const spec: SongSpec = { ...song.spec, steps: RENDER_STEPS.enhanced };
+    const prefix = song.codesPath ? { songId: song.id } : undefined;
+    return this.enqueueSong(spec, song.id, prefix, song.id);
   }
 
   async cancelJob(jobId: string): Promise<void> {
@@ -420,8 +445,69 @@ export class Engine {
     const finishedAt = this.ports.clock.now();
     await this.songs.setOutput(song.id, outPath, startedAt ? finishedAt - startedAt : undefined, composed, codesPath);
     await this.jobs.setState(job.id, 'done', { finishedAt });
+    if (song.replacesSongId) await this.replaceSong(song.id, song.replacesSongId);
     const done = (await this.songs.byId(song.id))!;
     this.emit({ kind: 'song_done', song: done });
+  }
+
+  /**
+   * Finish an "Enhance quality" re-take: the new render inherits the old
+   * version's date, parent, title and children, then the old files and row
+   * go. The old version is only removed once the composition is known to be
+   * preserved; otherwise the re-take stays as a new version beside it. If the
+   * old song was deleted mid-render, the re-take simply stays as an ordinary
+   * song (deleteSong already re-parented it).
+   *
+   * Every step is idempotent and the `replaces_song_id` marker is cleared
+   * last, so a crash at any point is completed by `finishReplacements` on
+   * the next boot (the Db port has no transactions). The verdict of the
+   * composition check is persisted before anything is removed: re-checking
+   * after the original's codes file is gone would wrongly fail.
+   */
+  private async replaceSong(newId: string, oldId: string): Promise<void> {
+    const [song, old] = await Promise.all([this.songs.byId(newId), this.songs.byId(oldId)]);
+    if (!song || old?.id === song.id) return;
+    if (old && !song.replaceVerified) {
+      if (!(await this.compositionPreserved(song, old))) {
+        await this.songs.clearReplaces(song.id);
+        return;
+      }
+      await this.songs.markReplaceVerified(song.id);
+    }
+    if (old) {
+      await this.songs.takePlaceOf(song, old);
+      if (old.outputPath) await this.ports.files.remove(old.outputPath).catch(() => {});
+      if (old.codesPath) await this.ports.files.remove(old.codesPath).catch(() => {});
+      await this.jobs.deleteForSong(old.id);
+      await this.songs.delete(old.id);
+    }
+    await this.songs.clearReplaces(song.id);
+  }
+
+  /**
+   * Did the re-take play the same composition? When both sides saved codes
+   * the SSC1 blobs must match byte for byte (the header holds only the
+   * shape). Without codes to compare, a free render is reproduced exactly by
+   * its seed (measured), but a forced one (Let it finish, a kept section)
+   * is not — its prefix came from another song's performance.
+   */
+  private async compositionPreserved(song: Song, old: Song): Promise<boolean> {
+    if (song.codesPath && old.codesPath) {
+      try {
+        const [a, b] = await Promise.all([this.ports.files.readBase64(song.codesPath), this.ports.files.readBase64(old.codesPath)]);
+        return a === b;
+      } catch {
+        return false;
+      }
+    }
+    return !old.prefixSongId;
+  }
+
+  /** Boot: complete any replacement a crash interrupted between harvest and swap. */
+  async finishReplacements(): Promise<number> {
+    const pending = await this.songs.unfinishedReplacements();
+    for (const song of pending) await this.replaceSong(song.id, song.replacesSongId!);
+    return pending.length;
   }
 
   /**

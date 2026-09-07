@@ -123,6 +123,7 @@ export function fakeFiles(): FileStore & {
   removed: string[];
   written: { relPath: string; b64: string }[];
   base64Content: string | null;
+  base64ByPath: Record<string, string>;
   existing: boolean;
 } {
   const f = {
@@ -131,6 +132,8 @@ export function fakeFiles(): FileStore & {
     written: [] as { relPath: string; b64: string }[],
     /** Returned by readBase64 when set (e.g. an SSC1 blob for prefix tests). */
     base64Content: null as string | null,
+    /** Per-path overrides, ahead of base64Content. */
+    base64ByPath: {} as Record<string, string>,
     existing: true,
     async libraryDir() {
       return 'C:\\lib';
@@ -153,8 +156,8 @@ export function fakeFiles(): FileStore & {
     async sha256(path: string) {
       return (path.replace(/\\/g, '/').split('/').pop() ?? 'abc').replace(/\.[^.]*$/, '');
     },
-    async readBase64() {
-      return f.base64Content ?? 'ZmFrZQ==';
+    async readBase64(p: string) {
+      return f.base64ByPath[p] ?? f.base64Content ?? 'ZmFrZQ==';
     },
     async exists() {
       return f.existing;

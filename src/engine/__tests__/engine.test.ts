@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Engine } from '@engine/index';
-import { defaultSpec } from '@engine/domain/types';
+import { RENDER_STEPS, canEnhance, defaultSpec } from '@engine/domain/types';
 import { flush, makePorts } from './fakes';
 
 const spec = () => ({
@@ -162,6 +162,241 @@ describe('Engine job pipeline', () => {
 
     await engine.deleteSong(c.id);
     expect(await engine.photos.byId(photo.id)).toBeNull();
+  });
+
+  it('enhances a song in place: the 80-step re-take inherits its date, lineage and children, and the old files go', async () => {
+    const { ports, world, clock, files } = makePorts();
+    const engine = await Engine.create(ports);
+    const photo = await engine.importPhoto('C:\pics\sunset.jpg');
+    const withPhoto = { ...spec(), photo };
+
+    // Each job needs a flush (to schedule its poll) and a tick (to fire it).
+    const settle = async (jobs: number) => {
+      for (let i = 0; i < jobs; i++) {
+        await flush();
+        await clock.advance(10_000);
+      }
+    };
+    const root = await engine.enqueueSong(withPhoto);
+    await clock.advance(1_000);
+    const original = await engine.enqueueSong(withPhoto, root.id);
+    await clock.advance(1_000);
+    const child = await engine.enqueueSong(withPhoto, original.id);
+    world.historyStatus = 'success';
+    await settle(3);
+    const before = (await engine.songs.byId(original.id))!;
+    expect(before.spec.steps).toBe(RENDER_STEPS.fast);
+    expect(canEnhance(before)).toBe(true);
+    await engine.songs.setTitle(original.id, 'Renamed');
+
+    await clock.advance(1_000);
+    world.historyStatus = 'running';
+    const take = await engine.enhanceSong(original.id);
+    expect(take.replacesSongId).toBe(original.id);
+    expect(take.spec.steps).toBe(RENDER_STEPS.enhanced);
+    expect(take.spec.seed).toBe(before.spec.seed);
+    expect(take.spec.durationSec).toBe(before.spec.durationSec);
+    await flush();
+    expect(world.submittedGraph?.sample.inputs.steps).toBe(RENDER_STEPS.enhanced);
+    // Until it lands, the original is untouched and still plays.
+    expect((await engine.songs.byId(original.id))?.status).toBe('done');
+
+    const doneEvents: string[] = [];
+    engine.on((e) => { if (e.kind === 'song_done') doneEvents.push(e.song.id); });
+    world.historyStatus = 'success';
+    await settle(1);
+
+    // The re-take now stands where the original stood.
+    const swapped = (await engine.songs.byId(take.id))!;
+    expect(doneEvents).toEqual([take.id]);
+    expect(swapped.status).toBe('done');
+    expect(swapped.createdAt).toBe(before.createdAt);
+    expect(swapped.parentId).toBe(root.id);
+    expect(swapped.spec.title).toBe('Renamed');
+    expect(swapped.replacesSongId).toBeUndefined();
+    expect(canEnhance(swapped)).toBe(false);
+    expect((await engine.songs.byId(child.id))?.parentId).toBe(take.id);
+    expect(await engine.songs.byId(original.id)).toBeNull();
+    expect(files.removed).toContain(before.outputPath);
+    // The shared photo survives: the re-take references it.
+    expect(await engine.photos.byId(photo.id)).not.toBeNull();
+    // Nothing to enhance twice.
+    await expect(engine.enhanceSong(take.id)).rejects.toThrow(/already/);
+  });
+
+  it('keeps an enhance re-take as an ordinary song when its original was deleted mid-render', async () => {
+    const { ports, world, clock } = makePorts();
+    const engine = await Engine.create(ports);
+    const original = await engine.enqueueSong(spec());
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    world.historyStatus = 'running';
+    const take = await engine.enhanceSong(original.id);
+    await flush();
+    await engine.deleteSong(original.id);
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    const done = (await engine.songs.byId(take.id))!;
+    expect(done.status).toBe('done');
+    expect(done.parentId).toBeUndefined();
+  });
+
+  it('returns the pending re-take instead of queuing a second enhance of the same song', async () => {
+    const { ports, world, clock } = makePorts();
+    const engine = await Engine.create(ports);
+    const original = await engine.enqueueSong(spec());
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    world.historyStatus = 'running';
+    const first = await engine.enhanceSong(original.id);
+    await flush();
+    const second = await engine.enhanceSong(original.id);
+    expect(second.id).toBe(first.id);
+    expect((await engine.songs.list()).length).toBe(2);
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    const left = await engine.songs.list();
+    expect(left.map((x) => x.id)).toEqual([first.id]);
+    expect(left[0].spec.steps).toBe(RENDER_STEPS.enhanced);
+  });
+
+  it('finishes a replacement interrupted between harvest and swap on the next boot', async () => {
+    const { ports, world, clock, files } = makePorts();
+    const engine = await Engine.create(ports);
+    const original = await engine.enqueueSong(spec());
+    await clock.advance(1_000);
+    const retake = await engine.enqueueSong({ ...spec(), steps: RENDER_STEPS.enhanced }, original.id);
+    world.historyStatus = 'success';
+    for (let i = 0; i < 2; i++) {
+      await flush();
+      await clock.advance(10_000);
+    }
+    expect((await engine.songs.byId(retake.id))?.status).toBe('done');
+    // "Crash" right after the job went done but before the swap ran: the
+    // marker is still on the finished re-take.
+    await ports.db.execute(`UPDATE song SET replaces_song_id = ? WHERE id = ?`, [original.id, retake.id]);
+
+    const engine2 = await Engine.create(ports);
+    await flush();
+    expect(await engine2.songs.byId(original.id)).toBeNull();
+    const swapped = (await engine2.songs.byId(retake.id))!;
+    expect(swapped.replacesSongId).toBeUndefined();
+    expect(swapped.parentId).toBeUndefined();
+    expect(swapped.createdAt).toBe(original.createdAt);
+    expect(files.removed).toContain(`C:\\lib\\songs/${original.id}.mp3`);
+  });
+
+  it('finishes a swap interrupted after the original files were removed, using the persisted verdict', async () => {
+    const { ports, world, clock, files } = makePorts();
+    world.stillsongNode = true;
+    const engine = await Engine.create(ports);
+    const original = await engine.enqueueSong(spec());
+    await clock.advance(1_000);
+    const retake = await engine.enqueueSong({ ...spec(), steps: RENDER_STEPS.enhanced }, original.id);
+    world.historyStatus = 'success';
+    for (let i = 0; i < 2; i++) {
+      await flush();
+      await clock.advance(10_000);
+    }
+    const before = (await engine.songs.byId(original.id))!;
+    expect(before.codesPath).toBeTruthy();
+    // "Crash" after the verdict was written and the original's files were
+    // removed, but before its row went: the old codes now read as garbage.
+    await ports.db.execute(`UPDATE song SET replaces_song_id = ?, replace_verified = 1 WHERE id = ?`, [original.id, retake.id]);
+    files.base64ByPath[before.codesPath!] = 'GONE';
+
+    const engine2 = await Engine.create(ports);
+    await flush();
+    expect(await engine2.songs.byId(original.id)).toBeNull();
+    const swapped = (await engine2.songs.byId(retake.id))!;
+    expect(swapped.replacesSongId).toBeUndefined();
+    expect(swapped.replaceVerified).toBeUndefined();
+    expect(swapped.createdAt).toBe(before.createdAt);
+
+    // Without the persisted verdict the same mismatch is (rightly) a keep.
+    const a = await engine2.enqueueSong(spec());
+    await clock.advance(1_000);
+    const b = await engine2.enqueueSong({ ...spec(), steps: RENDER_STEPS.enhanced }, a.id);
+    for (let i = 0; i < 2; i++) {
+      await flush();
+      await clock.advance(10_000);
+    }
+    await ports.db.execute(`UPDATE song SET replaces_song_id = ? WHERE id = ?`, [a.id, b.id]);
+    files.base64ByPath[(await engine2.songs.byId(a.id))!.codesPath!] = 'DIFFERENT';
+    const engine3 = await Engine.create(ports);
+    await flush();
+    expect((await engine3.songs.byId(a.id))?.status).toBe('done');
+    expect((await engine3.songs.byId(b.id))?.parentId).toBe(a.id);
+    expect((await engine3.songs.byId(b.id))?.replacesSongId).toBeUndefined();
+  });
+
+  it('keeps the re-take as a new version when the composition is not provably the same', async () => {
+    // With the overlay both renders save codes; a byte mismatch means the
+    // performance changed, so the original must survive.
+    const { ports, world, clock, files } = makePorts();
+    world.stillsongNode = true;
+    const engine = await Engine.create(ports);
+    const original = await engine.enqueueSong(spec());
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    const before = (await engine.songs.byId(original.id))!;
+    expect(before.codesPath).toBeTruthy();
+    world.historyStatus = 'running';
+    const take = await engine.enhanceSong(original.id);
+    await flush();
+    files.base64ByPath[before.codesPath!] = 'AAAA';
+    files.base64ByPath[`C:\\lib\\songs/${take.id}.codes.bin`] = 'BBBB';
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    expect((await engine.songs.byId(original.id))?.status).toBe('done');
+    const kept = (await engine.songs.byId(take.id))!;
+    expect(kept.status).toBe('done');
+    expect(kept.parentId).toBe(original.id);
+    expect(kept.replacesSongId).toBeUndefined();
+    expect(files.removed).not.toContain(before.outputPath);
+
+    // Matching codes: the swap goes ahead.
+    files.base64ByPath = {};
+    world.historyStatus = 'running';
+    const take2 = await engine.enhanceSong(original.id);
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    expect(await engine.songs.byId(original.id)).toBeNull();
+    expect((await engine.songs.byId(take2.id))?.replacesSongId).toBeUndefined();
+    expect((await engine.songs.byId(kept.id))?.parentId).toBe(take2.id);
+  });
+
+  it('never replaces a forced render that has no codes to compare', async () => {
+    // Stock ComfyUI (no overlay): a song rendered with a prefix has no saved
+    // codes, and a same-seed free render would not reproduce its prefix.
+    const { ports, world, clock } = makePorts();
+    const engine = await Engine.create(ports);
+    const source = await engine.enqueueSong(spec());
+    await clock.advance(1_000);
+    const forced = await engine.enqueueSong(spec(), source.id, { songId: source.id, frames: 4 });
+    world.historyStatus = 'success';
+    for (let i = 0; i < 2; i++) {
+      await flush();
+      await clock.advance(10_000);
+    }
+    expect((await engine.songs.byId(forced.id))?.prefixSongId).toBe(source.id);
+    world.historyStatus = 'running';
+    const take = await engine.enhanceSong(forced.id);
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    expect((await engine.songs.byId(forced.id))?.status).toBe('done');
+    expect((await engine.songs.byId(take.id))?.parentId).toBe(forced.id);
+    expect((await engine.songs.byId(take.id))?.replacesSongId).toBeUndefined();
   });
 
   it('sweeps photos no song references at boot, keeping shared ones', async () => {

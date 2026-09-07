@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraph, NODE_PHASES } from '@engine/comfy/graphBuilder';
-import { defaultSpec, MODEL_FILES } from '@engine/domain/types';
+import { defaultSpec, MODEL_FILES, RENDER_STEPS } from '@engine/domain/types';
 import { validateSpec } from '@engine/domain/validate';
 import { capCeiling, hardwareTier, renderCap } from '@engine/domain/duration';
 
@@ -13,7 +13,7 @@ describe('buildGraph', () => {
     expect(graph.unet.inputs.unet_name).toBe(MODEL_FILES.ditFp16);
     expect(graph.clip.inputs).toMatchObject({ clip_name: MODEL_FILES.textEncoder, type: 'minimax' });
     expect(graph.encode.inputs).toMatchObject({ clip: ['clip', 0], seed: 222, max_duration: 20, cfg_scale: 1.7, top_k: 50 });
-    expect(graph.sample.inputs).toMatchObject({ seed: 222, steps: 30, cfg: 1.7, sampler_name: 'euler', scheduler: 'simple' });
+    expect(graph.sample.inputs).toMatchObject({ seed: 222, steps: RENDER_STEPS.fast, cfg: 1.7, sampler_name: 'euler', scheduler: 'simple' });
     expect(graph.latent.inputs.seconds).toEqual(['encode', 1]);
     expect(graph.neg.inputs.conditioning).toEqual(['encode', 0]);
     expect(graph.decode.class_type).toBe('VAEDecodeAudioTiled');

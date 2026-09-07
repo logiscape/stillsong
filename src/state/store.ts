@@ -366,6 +366,25 @@ export async function rerunLonger(song: Song, extraSec = 30): Promise<void> {
   await enqueueRemix({ ...song.spec, durationSec }, song.id, prefix);
 }
 
+/**
+ * "Enhance quality": the same song re-taken with the 'enhanced' step count.
+ * It replaces the version it was made from when it finishes (the old one was
+ * just a rougher audio pass of the same composition), so no new version appears.
+ */
+export async function enhanceSong(song: Song): Promise<void> {
+  try {
+    setState({ creationError: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
+    await getEngine().enhanceSong(song.id);
+  } catch (err) {
+    setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** An "Enhance quality" re-take of this song is queued or rendering (the original stays listed until it lands). */
+export function enhancePending(song: Song, songs: Song[] = state.songs): boolean {
+  return songs.some((s) => s.replacesSongId === song.id && (s.status === 'queued' || s.status === 'running'));
+}
+
 /** Whether "Let it finish" can actually buy the song more room. */
 export function canRerunLonger(song: Song): boolean {
   return song.spec.durationSec < CAP.max;

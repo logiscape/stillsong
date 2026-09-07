@@ -5,6 +5,14 @@ export type VocalPref = 'any' | 'female' | 'male' | 'instrumental';
 
 export type Mp3Quality = 'V0' | '128k' | '320k';
 
+/**
+ * How new songs are made: sampler steps for the audio pass. Steps touch only
+ * the diffusion stage (timbre, clarity) — the composition is fixed by the
+ * seed — so an 'enhanced' re-render of a 'fast' song is the same song, clearer.
+ */
+export type RenderMethod = 'fast' | 'enhanced';
+export const RENDER_STEPS: Record<RenderMethod, number> = { fast: 40, enhanced: 80 };
+
 export interface PhotoAsset {
   id: string;
   sha256: string;
@@ -89,6 +97,23 @@ export interface Song {
   prefixSongId?: string;
   /** ...for this many frames (undefined = the whole matrix). Meaningless without prefixSongId. */
   prefixFrames?: number;
+  /**
+   * "Enhance quality": this render is a higher-step re-take of that song and
+   * takes its place (date, lineage, files) when it finishes, instead of
+   * becoming a new version.
+   */
+  replacesSongId?: string;
+  /**
+   * The re-take's composition was verified against the original's before any
+   * of the original was removed. Lets a swap interrupted mid-cleanup finish on
+   * the next boot without re-reading files that may already be gone.
+   */
+  replaceVerified?: boolean;
+}
+
+/** Whether "Enhance quality" has anything to offer: a finished song made with fewer steps than 'enhanced'. */
+export function canEnhance(song: Song): boolean {
+  return song.status === 'done' && !!song.outputPath && song.spec.steps < RENDER_STEPS.enhanced;
 }
 
 export type JobState = 'queued' | 'submitted' | 'running' | 'harvesting' | 'done' | 'failed' | 'cancelled';
@@ -140,7 +165,7 @@ export function defaultSpec(ditFile: string = MODEL_FILES.ditFp16): SongSpec {
     seed: randomSeed(),
     ditFile,
     tiledDecode: true,
-    steps: 30,
+    steps: RENDER_STEPS.fast,
     cfg: 1.7,
     encodeCfg: 1.7,
     topK: 50,

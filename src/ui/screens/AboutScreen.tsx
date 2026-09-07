@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Mp3Quality } from '@engine/domain/types';
+import type { Mp3Quality, RenderMethod } from '@engine/domain/types';
 import { saveSettings, useAppState } from '@state/store';
 import manifest from '../../../components.json';
 import { Badge } from '@ui/ds/Badge';
@@ -71,12 +71,30 @@ export function AboutScreen(): React.ReactElement {
         {settings && (
           <Section title="Settings">
             <Panel pad={20} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-              <Select
-                label="Quality of saved songs"
-                value={settings.quality}
-                onChange={(v) => void saveSettings({ ...settings, quality: v as Mp3Quality })}
-                options={[{ value: 'V0', label: 'Best (V0)' }, { value: '320k', label: 'Largest (320k)' }, { value: '128k', label: 'Smaller files (128k)' }]}
-              />
+              <div>
+                <Select
+                  label="How new songs are made"
+                  value={settings.renderMethod}
+                  onChange={(v) => void saveSettings({ ...settings, renderMethod: v as RenderMethod })}
+                  options={[{ value: 'fast', label: 'Fast' }, { value: 'enhanced', label: 'Enhanced quality' }]}
+                />
+                <span style={{ display: 'block', font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: 8, maxWidth: '52ch' }}>
+                  Enhanced quality gives the studio more time with each song, so voices and instruments come out
+                  clearer — and a song takes a while longer to make. Any song made the fast way can be enhanced later.
+                </span>
+              </div>
+              <div>
+                <Select
+                  label="Quality of saved songs"
+                  value={settings.quality}
+                  onChange={(v) => void saveSettings({ ...settings, quality: v as Mp3Quality })}
+                  options={[{ value: 'V0', label: 'Best (V0)' }, { value: '320k', label: 'Largest (320k)' }, { value: '128k', label: 'Smaller files (128k)' }]}
+                />
+                <span style={{ display: 'block', font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: 8, maxWidth: '52ch' }}>
+                  Only changes how the finished song is packed into an MP3 — its file size, and how much fine detail
+                  the file keeps. It doesn't change how the song is made.
+                </span>
+              </div>
               <Switch
                 checked={settings.lyricsAutoScroll}
                 onChange={(v) => void saveSettings({ ...settings, lyricsAutoScroll: v })}

@@ -8,7 +8,7 @@ const SIZES = {
 };
 
 export interface ButtonProps {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'quiet' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'glass' | 'quiet' | 'danger';
   size?: keyof typeof SIZES;
   icon?: string;
   iconRight?: string;
@@ -27,6 +27,8 @@ export function Button({ variant = 'primary', size = 'md', icon, iconRight, disa
     primary: { background: h ? 'var(--brass-300)' : 'var(--brass)', color: 'var(--text-on-accent)', border: '1px solid transparent', boxShadow: h ? 'var(--glow-brass)' : 'var(--shadow-2)' },
     secondary: { background: h ? 'var(--surface-3)' : 'var(--surface-2)', color: 'var(--ink-1)', border: '1px solid ' + (h ? 'var(--border-strong)' : 'var(--border-field)'), boxShadow: 'var(--shadow-1)' },
     ghost: { background: h ? 'var(--wash-1)' : 'transparent', color: h ? 'var(--ink-1)' : 'var(--ink-2)', border: '1px solid transparent', boxShadow: 'none' },
+    // Sits over a photo, like IconButton's glass.
+    glass: { background: h ? 'rgba(245,238,230,.16)' : 'rgba(12,11,10,.42)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', backdropFilter: 'var(--blur-chrome)', boxShadow: 'none' },
     quiet: { background: 'transparent', color: h ? 'var(--brass-100)' : 'var(--brass-200)', border: '1px solid transparent', boxShadow: 'none', padding: 0, height: 'auto' },
     danger: { background: h ? 'var(--clay)' : 'var(--clay-wash)', color: h ? 'var(--ink-1)' : '#E5A793', border: '1px solid var(--clay)', boxShadow: 'none' },
   }[variant];

@@ -69,6 +69,8 @@ const ADDED_COLUMNS: { table: string; column: string; ddl: string }[] = [
   { table: 'song', column: 'codes_path', ddl: `ALTER TABLE song ADD COLUMN codes_path TEXT` },
   { table: 'song', column: 'prefix_song_id', ddl: `ALTER TABLE song ADD COLUMN prefix_song_id TEXT` },
   { table: 'song', column: 'prefix_frames', ddl: `ALTER TABLE song ADD COLUMN prefix_frames INTEGER` },
+  { table: 'song', column: 'replaces_song_id', ddl: `ALTER TABLE song ADD COLUMN replaces_song_id TEXT` },
+  { table: 'song', column: 'replace_verified', ddl: `ALTER TABLE song ADD COLUMN replace_verified INTEGER` },
   { table: 'photo_asset', column: 'thumb_path', ddl: `ALTER TABLE photo_asset ADD COLUMN thumb_path TEXT` },
   { table: 'photo_asset', column: 'luminance', ddl: `ALTER TABLE photo_asset ADD COLUMN luminance REAL` },
   { table: 'photo_asset', column: 'dominant_color', ddl: `ALTER TABLE photo_asset ADD COLUMN dominant_color TEXT` },

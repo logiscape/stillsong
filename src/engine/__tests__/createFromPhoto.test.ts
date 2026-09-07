@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Engine } from '@engine/index';
 import { instrumentalSkeleton } from '@engine/cowriter/cowriter';
 import { renderCap } from '@engine/domain/duration';
-import { DURATION } from '@engine/domain/types';
+import { DURATION, RENDER_STEPS } from '@engine/domain/types';
 import { flush, makePorts } from './fakes';
 
 const PHOTO_CARD = `Subjects: an old rowboat tied to a dock.
@@ -66,6 +66,7 @@ describe('Engine.createFromPhoto', () => {
     expect(song.spec.vocalPref).toBe('female');
     expect(song.spec.targetSec).toBe(DURATION.default);
     expect(song.spec.durationSec).toBe(renderCap(DURATION.default, GOOD_LYRICS));
+    expect(song.spec.steps).toBe(RENDER_STEPS.fast);
 
     // The GPU handoff happened in order: LLM started, stopped, then submit.
     const calls = world.events;
@@ -84,6 +85,18 @@ describe('Engine.createFromPhoto', () => {
     await clock.advance(10_000);
     await flush();
     expect((await engine.songs.byId(song.id))?.status).toBe('done');
+  });
+
+  it('makes new songs with the enhanced step count when the setting says so', async () => {
+    const { ports, world } = makePorts();
+    const engine = await Engine.create(ports);
+    await engine.saveSettings({ ...engine.settings, renderMethod: 'enhanced' });
+    world.llmResponses = [PHOTO_CARD, compose('First Light', GOOD_CAPTION, GOOD_LYRICS)];
+    const song = await engine.createFromPhoto({ photoPath: 'C:\pics\boat.jpg', vocalPref: 'female' });
+    expect(song.spec.steps).toBe(RENDER_STEPS.enhanced);
+    // The setting survives a reload.
+    const again = await Engine.create(ports);
+    expect(again.settings.renderMethod).toBe('enhanced');
   });
 
   it('keeps instrumental songs tag-only end to end', async () => {
