@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { CreationStage, Engine, JobProgress, RenderPrefix } from '@engine/index';
 import type { Job, PhotoAsset, Song, SongSpec } from '@engine/domain/types';
-import { CAP, randomSeed } from '@engine/domain/types';
+import { CAP, isEnhanceOf, randomSeed } from '@engine/domain/types';
 import { compositionFrames, editPrefixFrames } from '@engine/domain/editPrefix';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
@@ -367,9 +367,9 @@ export async function rerunLonger(song: Song, extraSec = 30): Promise<void> {
 }
 
 /**
- * "Enhance quality": the same song re-taken with the 'enhanced' step count.
- * It replaces the version it was made from when it finishes (the old one was
- * just a rougher audio pass of the same composition), so no new version appears.
+ * "Enhance quality": the same song re-taken with the 'enhanced' step count,
+ * arriving as a new version beside the original like any remix (the sharper
+ * pass is usually, not always, the better one — the listener decides).
  */
 export async function enhanceSong(song: Song): Promise<void> {
   try {
@@ -380,9 +380,9 @@ export async function enhanceSong(song: Song): Promise<void> {
   }
 }
 
-/** An "Enhance quality" re-take of this song is queued or rendering (the original stays listed until it lands). */
+/** An "Enhance quality" take of this song is queued or rendering. */
 export function enhancePending(song: Song, songs: Song[] = state.songs): boolean {
-  return songs.some((s) => s.replacesSongId === song.id && (s.status === 'queued' || s.status === 'running'));
+  return songs.some((s) => isEnhanceOf(s, song) && (s.status === 'queued' || s.status === 'running'));
 }
 
 /** Whether "Let it finish" can actually buy the song more room. */

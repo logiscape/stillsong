@@ -35,7 +35,7 @@ export function SongScreen(): React.ReactElement | null {
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [enhanceBeforeSave, setEnhanceBeforeSave] = useState(false);
+  const [confirmEnhance, setConfirmEnhance] = useState(false);
   const prefersContrast = useMemo(() => window.matchMedia('(prefers-contrast: more)').matches, []);
   const lyricsRef = useRef<HTMLDivElement | null>(null);
 
@@ -75,13 +75,11 @@ export function SongScreen(): React.ReactElement | null {
   const photo = photoSrc(song.spec.photo);
   const pending = enhancePending(song, s.songs);
   const enhanceable = canEnhance(song) && !pending;
-  // Save a copy on a fast-pass song: offer the clearer take first.
-  const saveCopy = () => (enhanceable ? setEnhanceBeforeSave(true) : void exportSong(song));
 
   const menuItems: [string, string, () => void][] = [
     ['shuffle', 'Remix this song', () => navigate('remix')],
-    ...(enhanceable ? ([['wand-sparkles', 'Enhance quality', () => void enhanceSong(song)]] as [string, string, () => void][]) : []),
-    ['download', 'Save a copy…', saveCopy],
+    ...(enhanceable ? ([['wand-sparkles', 'Enhance quality…', () => setConfirmEnhance(true)]] as [string, string, () => void][]) : []),
+    ['download', 'Save a copy…', () => void exportSong(song)],
     ['folder-open', 'Reveal in folder', () => void revealSong(song)],
     ['pencil-line', 'Rename', () => setRenaming(song.spec.title)],
     ...(song.parentId ? ([['disc', 'View original version', () => openSong(song.parentId!)]] as [string, string, () => void][]) : []),
@@ -94,7 +92,7 @@ export function SongScreen(): React.ReactElement | null {
         <IconButton icon="chevron-left" label="Close" variant="glass" onClick={() => { stopPlayback(); navigate('sanctuary'); }} />
         <div style={{ flex: 1 }} />
         {canEnhance(song) && (
-          <Button variant="glass" size="sm" icon="wand-sparkles" disabled={pending} onClick={() => void enhanceSong(song)}>
+          <Button variant="glass" size="sm" icon="wand-sparkles" disabled={pending} onClick={() => setConfirmEnhance(true)}>
             {pending ? 'Enhancing…' : 'Enhance quality'}
           </Button>
         )}
@@ -172,16 +170,16 @@ export function SongScreen(): React.ReactElement | null {
         Anything you saved with Save a copy stays where you saved it. The song will be removed from Stillsong.
       </Dialog>
 
-      <Dialog open={enhanceBeforeSave} title="Enhance the sound first?" onClose={() => setEnhanceBeforeSave(false)}
+      <Dialog open={confirmEnhance} title="Enhance the sound?" onClose={() => setConfirmEnhance(false)}
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setEnhanceBeforeSave(false); void exportSong(song); }}>Save this version</Button>
-            <Button variant="primary" icon="wand-sparkles" onClick={() => { setEnhanceBeforeSave(false); void enhanceSong(song); }}>Enhance first</Button>
+            <Button variant="ghost" onClick={() => setConfirmEnhance(false)}>Not now</Button>
+            <Button variant="primary" icon="wand-sparkles" onClick={() => { setConfirmEnhance(false); void enhanceSong(song); }}>Enhance quality</Button>
           </>
         }>
-        This song was made with the faster setting. Enhancing gives the studio more time with the very same
-        performance, so voices and instruments come out clearer. The enhanced take replaces this one.
-        It usually takes 5–10 minutes, depending on the song — you can save a copy once it's ready.
+        The studio will play this very same performance again and take more time over the sound, so some
+        voices and instruments come out sharper. It usually takes 5–10 minutes, depending on the song.
+        The enhanced take arrives as a new version, and this one stays just as it is.
       </Dialog>
 
       {renaming !== null && (

@@ -23,8 +23,6 @@ interface Row {
   codes_path: string | null;
   prefix_song_id: string | null;
   prefix_frames: number | null;
-  replaces_song_id: string | null;
-  replace_verified: number | null;
 }
 
 /** Render instruction: teacher-force `songId`'s saved composition for `frames` frames (undefined = all). */
@@ -54,28 +52,23 @@ function rowToSong(r: Row): Song {
     codesPath: r.codes_path ?? undefined,
     prefixSongId: r.prefix_song_id ?? undefined,
     prefixFrames: r.prefix_frames ?? undefined,
-    replacesSongId: r.replaces_song_id ?? undefined,
-    replaceVerified: r.replace_verified === 1 || undefined,
   };
 }
 
 export class SongRepo {
   constructor(private readonly db: Db) {}
 
-  async create(
-    spec: SongSpec, now: number, parentId?: string, status: SongStatus = 'queued', prefix?: RenderPrefix, replacesSongId?: string,
-  ): Promise<Song> {
+  async create(spec: SongSpec, now: number, parentId?: string, status: SongStatus = 'queued', prefix?: RenderPrefix): Promise<Song> {
     const id = newId();
     await this.db.execute(
       `INSERT INTO song (id, created_at, title, idea_text, photo_asset_id, caption, lyrics, instrumental, duration_sec,
-         seed, dit_file, tiled_decode, steps, cfg, format, quality, status, parent_id, spec_json, prefix_song_id, prefix_frames,
-         replaces_song_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mp3', ?, ?, ?, ?, ?, ?, ?)`,
+         seed, dit_file, tiled_decode, steps, cfg, format, quality, status, parent_id, spec_json, prefix_song_id, prefix_frames)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mp3', ?, ?, ?, ?, ?, ?)`,
       [
         id, now, spec.title, spec.idea || null, spec.photo?.id ?? null, spec.caption, spec.lyrics,
         spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.ditFile, spec.tiledDecode ? 1 : 0,
         spec.steps, spec.cfg, spec.quality, status, parentId ?? null, JSON.stringify(spec),
-        prefix?.songId ?? null, prefix?.frames ?? null, replacesSongId ?? null,
+        prefix?.songId ?? null, prefix?.frames ?? null,
       ],
     );
     return (await this.byId(id))!;
@@ -133,44 +126,12 @@ export class SongRepo {
     await this.db.execute(`UPDATE song SET parent_id = ? WHERE parent_id = ?`, [newParentId, id]);
   }
 
-  /**
-   * Make `song` stand where `old` stood: same date (so the version order
-   * holds), same parent, same title (a rename during the re-take wins), and
-   * old's children now hang off it. Idempotent, and leaves `replaces_song_id`
-   * set: the caller removes old's files and row, then clears the marker last
-   * so a crash anywhere in between is finished by the boot sweep.
-   */
-  async takePlaceOf(song: Song, old: Song): Promise<void> {
-    const spec = { ...song.spec, title: old.spec.title };
-    await this.db.execute(
-      `UPDATE song SET created_at = ?, parent_id = ?, title = ?, spec_json = ? WHERE id = ?`,
-      [old.createdAt, old.parentId ?? null, old.spec.title, JSON.stringify(spec), song.id],
-    );
-    await this.reparentChildren(old.id, song.id);
-  }
-
-  /** Durable "same composition" verdict, written before the original loses anything. */
-  async markReplaceVerified(id: string): Promise<void> {
-    await this.db.execute(`UPDATE song SET replace_verified = 1 WHERE id = ?`, [id]);
-  }
-
-  /** The replacement is complete (or abandoned): the re-take is an ordinary song from here on. */
-  async clearReplaces(id: string): Promise<void> {
-    await this.db.execute(`UPDATE song SET replaces_song_id = NULL, replace_verified = NULL WHERE id = ?`, [id]);
-  }
-
-  /** An "Enhance quality" re-take of `songId` that is still queued or rendering, if any. */
-  async pendingReplacementOf(songId: string): Promise<Song | null> {
+  /** Versions of `songId` that are still queued or rendering, oldest first. */
+  async pendingChildrenOf(songId: string): Promise<Song[]> {
     const rows = await this.db.select<Row>(
-      `SELECT * FROM song WHERE replaces_song_id = ? AND status IN ('queued', 'running') ORDER BY created_at LIMIT 1`,
+      `SELECT * FROM song WHERE parent_id = ? AND status IN ('queued', 'running') ORDER BY created_at`,
       [songId],
     );
-    return rows.length ? rowToSong(rows[0]) : null;
-  }
-
-  /** Finished re-takes whose swap never completed (crash between harvest and replacement). */
-  async unfinishedReplacements(): Promise<Song[]> {
-    const rows = await this.db.select<Row>(`SELECT * FROM song WHERE replaces_song_id IS NOT NULL AND status = 'done'`);
     return rows.map(rowToSong);
   }
 

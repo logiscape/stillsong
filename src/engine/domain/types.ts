@@ -97,23 +97,19 @@ export interface Song {
   prefixSongId?: string;
   /** ...for this many frames (undefined = the whole matrix). Meaningless without prefixSongId. */
   prefixFrames?: number;
-  /**
-   * "Enhance quality": this render is a higher-step re-take of that song and
-   * takes its place (date, lineage, files) when it finishes, instead of
-   * becoming a new version.
-   */
-  replacesSongId?: string;
-  /**
-   * The re-take's composition was verified against the original's before any
-   * of the original was removed. Lets a swap interrupted mid-cleanup finish on
-   * the next boot without re-reading files that may already be gone.
-   */
-  replaceVerified?: boolean;
 }
 
 /** Whether "Enhance quality" has anything to offer: a finished song made with fewer steps than 'enhanced'. */
 export function canEnhance(song: Song): boolean {
   return song.status === 'done' && !!song.outputPath && song.spec.steps < RENDER_STEPS.enhanced;
+}
+
+/**
+ * Is `take` an "Enhance quality" version of `song`: its child, the same seed
+ * (so the same performance), at the 'enhanced' step count or more.
+ */
+export function isEnhanceOf(take: Song, song: Song): boolean {
+  return take.parentId === song.id && take.spec.seed === song.spec.seed && take.spec.steps >= RENDER_STEPS.enhanced;
 }
 
 export type JobState = 'queued' | 'submitted' | 'running' | 'harvesting' | 'done' | 'failed' | 'cancelled';
