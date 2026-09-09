@@ -40,6 +40,17 @@ this project — procedurally drawn (flat shapes via a one-off Pillow script),
 with no external artwork, fonts, or stock assets. It is covered by the
 project's GPL-3.0 license like the rest of the repository.
 
+## Example songs
+
+The three songs a new library starts with (`examples/`: two photographs, one
+sketch, and the songs Stillsong made from them) are first-party: the pictures
+were taken and drawn by the Stillsong author, and the songs were rendered
+locally with Stillsong. They are © 2026 Logiscape LLC and released under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — see
+[examples/LICENSE.md](examples/LICENSE.md). The MP3s carry the same
+machine-generated disclosure comment that *Save a copy* writes, and their
+photos carry no camera metadata.
+
 ## Your songs
 
 Songs you create with Stillsong are yours. Neither this project nor the model

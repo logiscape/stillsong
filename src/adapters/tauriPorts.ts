@@ -91,6 +91,10 @@ class TauriFiles implements FileStore {
   async reveal(path: string): Promise<void> {
     await invoke('files_reveal', { path });
   }
+
+  async examplesDir(): Promise<string | null> {
+    return invoke<string | null>('files_examples_dir');
+  }
 }
 
 class RealClock implements Clock {

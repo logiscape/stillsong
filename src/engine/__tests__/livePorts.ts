@@ -224,6 +224,9 @@ export function nodeFiles(rootDir: string): FileStore {
       await fs.rm(p, { force: true });
     },
     async reveal() {},
+    async examplesDir() {
+      return null;
+    },
   };
 }
 

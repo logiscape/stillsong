@@ -125,6 +125,9 @@ export function fakeFiles(): FileStore & {
   base64Content: string | null;
   base64ByPath: Record<string, string>;
   existing: boolean;
+  /** What `examplesDir()` reports; null = no examples bundled. */
+  examplesRoot: string | null;
+  imported: { src: string; relPath: string }[];
 } {
   const f = {
     downloaded: [] as string[],
@@ -135,14 +138,20 @@ export function fakeFiles(): FileStore & {
     /** Per-path overrides, ahead of base64Content. */
     base64ByPath: {} as Record<string, string>,
     existing: true,
+    examplesRoot: null as string | null,
+    imported: [] as { src: string; relPath: string }[],
     async libraryDir() {
       return 'C:\\lib';
+    },
+    async examplesDir() {
+      return f.examplesRoot;
     },
     async download(url: string, relPath: string) {
       f.downloaded.push(url);
       return `C:\\lib\\${relPath}`;
     },
-    async importFile(_s: string, relPath: string) {
+    async importFile(src: string, relPath: string) {
+      f.imported.push({ src, relPath });
       return `C:\\lib\\${relPath}`;
     },
     async writeBase64(relPath: string, b64: string) {

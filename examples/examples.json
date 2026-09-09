@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "songs": [
+    {
+      "id": "f4ceeae0ee7d4766b08e47691fd83627",
+      "spec": {
+        "title": "Where the Old Gods Stood",
+        "idea": "",
+        "caption": "Global Metadata: Symphonic metal with heavy folk-horror influence. Tempo is a slow, heavy 70 bpm. Key is D minor. The emotional arc begins with a cold, eerie mystery that builds into a powerful, overwhelming spiritual peak before receding into a haunting, hollow silence. Listening scenario is a cinematic, immersive experience. The production profile features a wide, cathedral-like soundstage with deep, resonant low-end and a shimmering, bright high-end to capture the moon's glare.\n\nVocal Details: Male lead, deep and operatic baritone with an earthy, textured grit. The delivery starts as a whispered, intimate folk narrative and evolves into powerful, soaring belts during the chorus, occasionally shifting into a primal, rhythmic chant in the bridge. Backing vocals include a dark, masculine choir and ethereal, high-pitched ghost-like harmonies. Heavy hall reverb and slight delay on the lead vocal for depth.\n\nArrangement: Intro: a lonely, weeping cello and haunting woodwinds establish a freezing atmosphere with a low, droning synth pad. Verse: a dark, finger-picked acoustic guitar and a muted frame drum provide a rustic, folk-horror pulse while the vocals remain intimate and dry. Pre-Chorus: orchestral strings swell dramatically and a minor-key piano adds sharp, icy notes. Chorus: a massive symphonic explosion with heavy, distorted guitars, double-kick drumming, and a full choir singing in unison with the soaring lead. Verse: the heavy elements drop out, leaving only the woodwinds and strings to create a sense of lingering tension. Bridge: the music shifts to a tribal, primal feel with heavy, pounding percussion and a rhythmic, chanted vocal style. Solo: a weeping violin plays a tragic melody over a high-speed, technical metal riff. Chorus: a final, glorious peak of symphonic power, featuring a high-register orchestral brass section joining the choir for a climactic finish. Outro: the heavy instruments cut out abruptly, leaving only the cello and the sound of wind through the branches to fade into silence.",
+        "lyrics": "[intro]\n\n[verse]\nThe branches reach like frozen bone\nA path of ice, I walk alone\nThe silver orb begins to burn\nTo every shadow, I return\n\n[pre-chorus]\nThe forest breathes, a hollow sigh\nBeneath the lid of winter's sky\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[verse]\nA spark of gold upon the floor\nA door of light, a hidden door\nThe thicket parts, the air is thin\nThe spirit wakes from deep within\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[bridge]\nSpeak the name. Break the seal.\nMake the unseen vision real.\n\n[solo]\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[outro]\nThe moon remains...\nThe path is mine...",
+        "instrumental": false,
+        "targetSec": 120,
+        "durationSec": 300,
+        "seed": "4698559761364097",
+        "ditFile": "minimax_music3_dit_fp16.safetensors",
+        "tiledDecode": true,
+        "steps": 40,
+        "cfg": 1.7,
+        "encodeCfg": 1.7,
+        "topK": 50,
+        "quality": "V0",
+        "vocalPref": "male",
+        "genreHint": "Symphonic metal with a heavy folk-horror influence",
+        "language": "English"
+      },
+      "actualSec": 191.56,
+      "hitCeiling": false,
+      "photo": {
+        "file": "moonlit-forest.jpg",
+        "source": "photo",
+        "analysis": {
+          "card": "Subjects: Bare, skeletal trees with intricate branch patterns; a dense thicket of woods; a bright, glowing orb of light (moon) filtered through the canopy; a small, sharp point of light on the forest floor.\nSetting: A dense forest or woodland; late autumn or winter (leafless trees); clear night sky with scattered clouds.\nTime of day & light: Nighttime; high-contrast lighting; silvery-white moon glow against deep blacks and charcoal greys; cool, monochromatic palette.\nVisible text: none\nStory: A traveler pauses in a frozen forest, momentarily blinded by the moon's glare as they search for a hidden path. They have just stepped out of the shadows of the thicket and are about to continue their journey into the unknown.\nMood words: Ethereal, desolate, mysterious, cold, haunting, luminous, silent.\nEra & culture cues: Timeless; nature-centric; \"dark academia\" or \"folk-horror\" aesthetic.\nSong angles: \n1. A haunting folk ballad about a spiritual awakening in the middle of a winter forest.\n2. A moody indie-pop song about a secret meeting in a place where no one can see.\n3. A cinematic, atmospheric track about the feeling of being small and insignificant under a vast night sky.",
+          "source": "photo"
+        }
+      },
+      "audio": "where-the-old-gods-stood.mp3",
+      "codes": "where-the-old-gods-stood.codes.bin"
+    },
+    {
+      "id": "e0fce7dcccc4489bb7e0deb9567086e0",
+      "spec": {
+        "title": "The Skeleton of the Sky",
+        "idea": "",
+        "caption": "Global Metadata: Dark Folk with a heavy cinematic and medieval influence. Tempo is a slow, deliberate 65 bpm. Key is B minor. The emotional arc begins with a sense of eerie, frozen anticipation and builds into a sweeping, tragic majesty before receding into a hollow, haunting silence. Listening scenario: A desolate, overgrown ruin at twilight. The production profile features a wide, atmospheric soundstage with a deep, resonant low-end and a bright, crystalline high-end to capture the sharp textures of the steel.\n\nVocal Details: Female lead, a deep and resonant baritone with a slight gravelly texture, evocative of a medieval bard. The delivery is intimate and hushed in the verses, moving into a powerful, operatic belt during the chorus. Backing vocals include low-register male humming and ethereal, distant choral textures that provide a sense of ancient scale. Subtle reverb creates a cathedral-like space for the voice.\n\nArrangement: Intro: A low, vibrating drone synth is layered with a mourning, weeping cello to establish a chilling, medieval atmosphere. Verse: A sparse, finger-picked acoustic guitar provides a rhythmic pulse, accompanied by a muffled, heartbeat-like percussion that mimics a slow pulse. Pre-Chorus: A haunting woodwind melody (reminiscent of an oboe) enters, joined by swelling, low-register strings that build a sense of impending movement. Chorus: A massive orchestral explosion occurs, featuring heavy, distorted cellos, a deep cinematic drum hit on every downbeat, and a soaring, tragic string section; the mood shifts to one of epic, tragic grandeur. Verse: Instrumentation thins back to the acoustic guitar and a subtle, rhythmic mechanical clicking sound, creating a sense of industrial decay. Chorus: Similar to the first, but with more prominent string layers and a fuller choral backing to increase the emotional weight. Bridge: The music slows significantly, focusing on a grinding stone-like texture and a rhythmic, chanted vocal style that feels like an ancient incantation. Solo: A weeping, high-register violin plays a tragic, soaring melody over a dark, driving beat that maintains the momentum. Chorus: A final, climactic peak with full orchestral weight, featuring a powerful choral finish that reaches a peak before falling away. Outro: The heavy instruments cut out suddenly, leaving only a single, decaying cello note and the ambient sound of a cold wind blowing through iron.",
+        "lyrics": "[intro]\n\n[verse]\nIron ribs against the gray\nWaiting for the break of day\nPillars of jade, deep and cold\nWatching the secrets of the old\nThe pond is glass, a mirror's face\nHolding the ghosts of a hollow place\n\n[pre-chorus]\nThe wind is a whisper, a dying breath\nA dance of life, a shadow of death\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[verse]\nVeins of gold and blood-red lines\nTwisting through the ancient pines\nThe buds are waking, the winter's done\nBut the beast remains, beneath the sun\nSilence reigns in the empty hall\nWaiting for the summer's call\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[bridge]\nThe gears are frozen, the heart is still\nLocked in a cage of iron will\nWait for the fall\nWait for the rise\n\n[solo]\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[outro]\nStill it stands\nStill it waits\nMm...",
+        "instrumental": false,
+        "targetSec": 120,
+        "durationSec": 300,
+        "seed": "6467562359943454",
+        "ditFile": "minimax_music3_dit_fp16.safetensors",
+        "tiledDecode": true,
+        "steps": 40,
+        "cfg": 1.7,
+        "encodeCfg": 1.7,
+        "topK": 50,
+        "quality": "V0",
+        "vocalPref": "male",
+        "genreHint": "An abandoned forgotten roller coaster, reimagined as a hauntingly beautiful dark medieval tale",
+        "language": "English"
+      },
+      "actualSec": 220.44,
+      "hitCeiling": false,
+      "photo": {
+        "file": "roller-coaster.jpg",
+        "source": "photo",
+        "analysis": {
+          "card": "Subjects: A red and yellow roller coaster track, massive teal-colored support pillars, a still body of water with clear reflections, and budding trees with thin branches.\nSetting: An amusement park near a pond or lake; early spring; clear, sunny weather.\nTime of day & light: Midday; bright, direct sunlight; palette of vibrant red, deep teal, bright sky blue, and earthy browns.\nVisible text: none\nStory: The park is currently closed, and the coaster stands as a silent skeleton waiting for the first guests of the season to arrive. It captures the \"calm before the storm\" of a busy summer day.\nMood words: Still, expectant, towering, vibrant, mechanical, serene, suspended.\nEra & culture cues: Modern theme park architecture; contemporary leisure and tourism culture.\nSong angles:\n1. A nostalgic ballad from the point of view of a child looking at the park from the outside fence.\n2. A high-energy electronic track mimicking the sudden drop and rush of the ride.\n3. A melancholic indie song about a love that was a \"high\" but has now come to a standstill.",
+          "source": "photo"
+        }
+      },
+      "audio": "the-skeleton-of-the-sky.mp3",
+      "codes": "the-skeleton-of-the-sky.codes.bin"
+    },
+    {
+      "id": "83309f0dec654b6c9ef5f4d3d86109e3",
+      "spec": {
+        "title": "The Last Spark",
+        "idea": "",
+        "caption": "Global Metadata: Minimalist Neo-Classical, Ambient Piano. Tempo is very slow, around 60 bpm. Key is C minor. The emotional arc moves from a state of hollow, freezing isolation to a fragile, flickering warmth before receding into a profound, final silence. Listening scenario: A cold, empty room at 3 AM. Production profile features a wide, lush hall reverb, a felt piano texture with audible hammers and mechanical noises for intimacy, and a very high dynamic range to emphasize the quietest notes. The overall sound is extremely dry in the foreground but wet in the tail, creating a sense of a tiny sound in a massive space.\n\nVocal Details: Male lead, deep and weary baritone. The delivery is intimate and extremely breathy, almost a whisper, as if trying not to break the silence. It stays in a low register throughout, emphasizing the weight of the loneliness. There are no backing vocals, ensuring the focus remains entirely on the singular human voice. Minimal reverb is used on the vocal to keep it feeling close to the listener's ear, contrasted against the large reverb of the piano.\n\nArrangement: Intro: A felt piano plays a slow, sparse melody with long, decaying notes; the sound of the keys being pressed and the mechanical movement of the piano is audible to enhance the sense of solitude. Verse: The piano continues the pattern while the vocal enters, very dry and close, sitting right at the front of the mix. Chorus: The piano chords become slightly fuller and more resonant, providing a small lift in volume and emotional weight, but the arrangement remains strictly minimalist to mirror the one against the all theme. Verse: The piano returns to the original sparse pattern, dropping the weight. Bridge: The piano notes become slightly more frequent and urgent, creating a sense of straining to hold onto a memory before a final, lingering chord. Chorus: A repeat of the previous chorus, slightly louder with more sustain on the piano's final notes. Outro: The piano melody slows down significantly, the notes becoming further apart until only a single, final low note rings out, slowly fading into the heavy reverb until it is gone. The transition from the bridge to the final chorus should feel like a desperate, final effort of the voice, while the outro feels like the light finally going out.",
+        "lyrics": "[intro]\n\n[verse]\nA speck of light\nIn the hollow night\nA name I hold\nAgainst the cold\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[verse]\nI try to see\nWhat used to be\nA face a word\nA truth unheard\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[bridge]\nHold it close\nBefore it goes\nDon't let it fade\nIn the shadow's shade\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[outro]\nOne last light...\nStay...",
+        "instrumental": false,
+        "targetSec": 120,
+        "durationSec": 300,
+        "seed": "321100265480443",
+        "ditFile": "minimax_music3_dit_fp16.safetensors",
+        "tiledDecode": true,
+        "steps": 40,
+        "cfg": 1.7,
+        "encodeCfg": 1.7,
+        "topK": 50,
+        "quality": "V0",
+        "vocalPref": "male",
+        "genreHint": "sad. empty. alone.",
+        "language": "English"
+      },
+      "actualSec": 159.64,
+      "hitCeiling": false,
+      "photo": {
+        "file": "spark.png",
+        "source": "drawing",
+        "analysis": {
+          "card": "Subjects: A single, minuscule white speck centered in a vast, solid black field.\nWhat's happening: A lone point of light persists within an infinite void.\nStory they want to tell: The drawing expresses the feeling of extreme isolation or the singular importance of one small thing—a spark of hope, a single life, or a lone thought—amidst a crushing, overwhelming emptiness. It captures the \"one\" against the \"all,\" representing the smallest possible unit of existence or the first light of a new beginning.\nVisible text: none\nMood words: Solitary, vast, quiet, infinitesimal, profound, lonely, luminous, expectant.\nSong angles:\n1. A haunting, minimalist piano piece about the last memory of a loved one remaining in a fading mind.\n2. A cinematic space-ambient track about the birth of a galaxy from a single atom.\n3. A raw, acoustic ballad about holding onto one tiny secret in a world of total silence.",
+          "source": "drawing"
+        }
+      },
+      "audio": "the-last-spark.mp3",
+      "codes": "the-last-spark.codes.bin"
+    }
+  ]
+}

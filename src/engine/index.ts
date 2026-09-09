@@ -24,6 +24,7 @@ import { LlmClient } from './cowriter/llmClient';
 import { Cowriter, type CowriteRequest, type CowriteResult } from './cowriter/cowriter';
 import { lintSong, type LintIssue } from './cowriter/linter';
 import { VramArbiter } from './orchestrator/vram';
+import { seedExamples } from './examples';
 
 /** Where our renders land under ComfyUI's output dir (the graph's filename_prefix folder). */
 export const RENDER_OUTPUT_SUBFOLDER = 'audio/stillsong';
@@ -124,6 +125,10 @@ export class Engine {
     // After recovery so an in-flight render being harvested on this boot is
     // never mistaken for an orphan (its song row exists either way).
     void engine.sweepComfyOutputs().catch(() => {});
+    // Bundled example songs land in an empty library once (examples.ts) —
+    // before the photo sweep, so their assets are referenced when it runs.
+    // A failure here must not stop the boot; the seed resumes next time.
+    await seedExamples({ files: ports.files, clock: ports.clock, songs: engine.songs, photos: engine.photos, settings: settingsRepo }).catch(() => 0);
     // Awaited: nothing can import a photo until create() returns, so a photo
     // chosen right after boot can't be swept between its import and its song.
     await engine.sweepOrphanPhotos().catch(() => 0);

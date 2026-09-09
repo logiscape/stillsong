@@ -50,6 +50,7 @@ pub fn run() {
             ws::ws_connect,
             ws::ws_close,
             files::files_library_dir,
+            files::files_examples_dir,
             files::files_import,
             files::files_export,
             files::files_make_thumbnail,

@@ -55,6 +55,19 @@ export class SettingsRepo {
     };
   }
 
+  /** One-off markers outside AppSettings (e.g. the example-library seed); `save` never touches them. */
+  async getFlag(key: string): Promise<string | null> {
+    const rows = await this.db.select<{ value: string }>(`SELECT value FROM setting WHERE key = ?`, [key]);
+    return rows.length ? rows[0].value : null;
+  }
+
+  async setFlag(key: string, value: string): Promise<void> {
+    await this.db.execute(
+      `INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, value],
+    );
+  }
+
   async save(settings: AppSettings): Promise<void> {
     for (const [key, value] of Object.entries(settings)) {
       await this.db.execute(

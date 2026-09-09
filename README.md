@@ -55,6 +55,12 @@ and your art always remains yours.
 - **Save.** Export an MP3 to listen or share, with an ID3 tag providing trust
   and transparency.
 
+A new library starts with three example songs (two photos and a sketch, and
+what Stillsong made of them) so there is something to listen to and remix
+before your first song. They are ordinary songs: delete them whenever you like
+and they stay gone. See [`examples/`](examples/) for what they are and how
+they are licensed.
+
 ## How it works
 
 Two open-weight models do the creative work, each run by a well-known
@@ -196,6 +202,7 @@ src/state/         UI store
 src/ui/            React interface: screens, design-system components, vendored fonts
 src-tauri/         Rust shell: process supervisor, downloads, GPU detection, installer hooks
 comfy-overlay/     first-party ComfyUI custom node (composition capture and continuation)
+examples/          the three example songs a new library starts with (CC BY 4.0), bundled as a resource
 components.json    pinned manifest of everything first-run setup downloads, incl. the Python lock
 scripts/           dev ComfyUI launcher, overlay install/smoke tests, measurement tools,
                    the Python lock generator and manifest checker
@@ -273,6 +280,11 @@ full notice texts in [THIRD-PARTY-LICENSES.txt](THIRD-PARTY-LICENSES.txt).
 Model weights are downloaded by the user from their upstream sources at first
 run and are governed by their own licenses: the MiniMax-Music3 Community
 License and, for Gemma 4, [Apache 2.0](https://ai.google.dev/gemma/apache_2).
+
+The example songs, photos and sketch in [`examples/`](examples/) are
+© 2026 Logiscape LLC and released under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) rather than the
+GPL, so they can be reused as media (see [examples/LICENSE.md](examples/LICENSE.md)).
 
 Music composed locally by MiniMax-Music3. Lyrics by Gemma 4. Engines: ComfyUI
 and llama.cpp. A [Logiscape](https://github.com/logiscape) project.

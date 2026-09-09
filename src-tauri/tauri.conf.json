@@ -33,7 +33,8 @@
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
     "resources": {
-      "../comfy-overlay/ComfyUI-Stillsong/": "comfy-overlay/ComfyUI-Stillsong/"
+      "../comfy-overlay/ComfyUI-Stillsong/": "comfy-overlay/ComfyUI-Stillsong/",
+      "../examples/": "example-songs/"
     },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },

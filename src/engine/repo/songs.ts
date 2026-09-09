@@ -74,6 +74,37 @@ export class SongRepo {
     return (await this.byId(id))!;
   }
 
+  /**
+   * A finished song arriving from outside the render pipeline (the bundled
+   * examples): caller-chosen id, status 'done', no job row. The files must
+   * already be in the library.
+   */
+  async insertFinished(input: {
+    id: string;
+    spec: SongSpec;
+    createdAt: number;
+    outputPath: string;
+    codesPath?: string;
+    actualSec?: number;
+    hitCeiling?: boolean;
+  }): Promise<Song> {
+    const { id, spec } = input;
+    await this.db.execute(
+      `INSERT INTO song (id, created_at, title, idea_text, photo_asset_id, caption, lyrics, instrumental, duration_sec,
+         seed, dit_file, tiled_decode, steps, cfg, format, quality, status, spec_json,
+         output_path, codes_path, actual_sec, hit_ceiling)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mp3', ?, 'done', ?, ?, ?, ?, ?)`,
+      [
+        id, input.createdAt, spec.title, spec.idea || null, spec.photo?.id ?? null, spec.caption, spec.lyrics,
+        spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.ditFile, spec.tiledDecode ? 1 : 0,
+        spec.steps, spec.cfg, spec.quality, JSON.stringify(spec),
+        input.outputPath, input.codesPath ?? null, input.actualSec ?? null,
+        input.hitCeiling == null ? null : input.hitCeiling ? 1 : 0,
+      ],
+    );
+    return (await this.byId(id))!;
+  }
+
   async byId(id: string): Promise<Song | null> {
     const rows = await this.db.select<Row>(`SELECT * FROM song WHERE id = ?`, [id]);
     return rows.length ? rowToSong(rows[0]) : null;

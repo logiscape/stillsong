@@ -177,7 +177,7 @@ export function SongScreen(): React.ReactElement | null {
             <Button variant="primary" icon="wand-sparkles" onClick={() => { setConfirmEnhance(false); void enhanceSong(song); }}>Enhance quality</Button>
           </>
         }>
-        The studio will play this very same performance again and take more time over the sound, so some
+        The studio will record this very same performance again and take more time over the sound, so some
         voices and instruments come out sharper. It usually takes 5–10 minutes, depending on the song.
         The enhanced take arrives as a new version, and this one stays just as it is.
       </Dialog>

@@ -56,6 +56,8 @@ export interface FileStore {
   /** Opens the OS file manager with the file selected. */
   reveal(path: string): Promise<void>;
   libraryDir(): Promise<string>;
+  /** Absolute dir of the bundled example songs (examples/ in the repo, a Tauri resource), or null when not shipped. */
+  examplesDir(): Promise<string | null>;
 }
 
 export interface Clock {

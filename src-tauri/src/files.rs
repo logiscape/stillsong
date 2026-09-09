@@ -20,6 +20,22 @@ pub fn files_library_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(library_root(&app)?.to_string_lossy().to_string())
 }
 
+/// Where the bundled example songs live (examples/ in the repo, shipped as
+/// the `example-songs` Tauri resource next to the ComfyUI overlay — not
+/// `examples`, which in dev would share target/debug/examples with cargo's
+/// own example binaries). None when a build carries no examples; the engine
+/// then simply leaves a new library empty.
+#[tauri::command]
+pub fn files_examples_dir(app: tauri::AppHandle) -> Option<String> {
+    let dir = tauri::Manager::path(&app)
+        .resource_dir()
+        .ok()?
+        .join("example-songs");
+    dir.join("examples.json")
+        .is_file()
+        .then(|| dir.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn files_import(
     app: tauri::AppHandle,
