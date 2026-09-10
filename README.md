@@ -131,8 +131,12 @@ interpreter and every Python package — is pinned by exact URL, size and
 SHA-256 in [`components.json`](components.json); the downloader only starts a
 connection to one of the four hosts named there, follows their redirects only
 over https, accepts no more bytes than the pinned size, and discards anything
-whose hash does not match. No package resolver ever runs on your machine: the
-Python environment is assembled offline from the verified files.
+whose hash does not match. The one file pinned differently is ComfyUI's
+source archive, which GitHub generates on request and may recompress: it is
+pinned by the SHA-256 of the files it unpacks to (`treeSha256`), so the
+archive is unpacked into a staging folder, checked, and only then put in
+place. No package resolver ever runs on your machine: the Python environment
+is assembled offline from the verified files.
 
 After that there is no updater, no telemetry and no remote host the interface
 is even permitted to contact: its only network bridge refuses anything that

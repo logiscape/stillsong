@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   archiveBasename, componentArtifacts, componentsBytes, hostAllowed,
-  formatSums, parseSums, fitReport, MEDIA,
+  formatSums, parseSums, fitReport, MEDIA, TREE_BOUND_SIZE_SLACK,
 } from './layout.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +26,7 @@ const fixture = {
     { id: 'uv', kind: 'tool', url: 'https://github.com/astral-sh/uv/releases/download/0.12.6/uv-x86_64-pc-windows-msvc.zip', size: 2, sha256: 'cd', installPath: 'uv', extract: 'zip' },
     { id: 'python-dist', kind: 'runtime', url: 'https://github.com/x/cpython-3.12.14%2B20260901-x86_64-pc-windows-msvc-install_only_stripped.tar.gz', size: 3, sha256: 'ef', installPath: 'python-dist', extract: 'tar.gz-strip1' },
     { id: 'music-dit', kind: 'model', url: 'https://huggingface.co/x/resolve/y/diffusion_models/minimax_music3_dit_fp16.safetensors', size: 4, sha256: '01', installPath: 'comfy-data/models/diffusion_models/minimax_music3_dit_fp16.safetensors' },
+    { id: 'comfyui', kind: 'runtime', url: 'https://github.com/x/y/archive/abc123.tar.gz', size: 5, treeSha256: 'EF', installPath: 'ComfyUI', extract: 'tar.gz-strip1' },
   ],
 };
 
@@ -41,6 +42,12 @@ test('artifact destinations match manifest.rs', () => {
   assert.equal(by['music-dit'].rel, 'comfy-data/models/diffusion_models/minimax_music3_dit_fp16.safetensors');
   assert.equal(by['torch-2.13.0+cu130-cp312-cp312-win_amd64.whl'].rel, '_downloads/wheelhouse/torch-2.13.0+cu130-cp312-cp312-win_amd64.whl');
   assert.equal(by['torch-2.13.0+cu130-cp312-cp312-win_amd64.whl'].sha256, 'ab', 'hashes are lower-cased');
+  assert.equal(by.uv.maxSize, 2, 'byte-bound: the size is exact');
+  // Tree-bound: staged like any archive, no byte hash, a size ceiling.
+  assert.equal(by.comfyui.rel, '_downloads/abc123.tar.gz');
+  assert.equal(by.comfyui.sha256, null);
+  assert.equal(by.comfyui.treeSha256, 'ef');
+  assert.equal(by.comfyui.maxSize, 5 * TREE_BOUND_SIZE_SLACK);
 });
 
 test('the real manifest yields unique, rooted, forward-slash paths', () => {
@@ -51,8 +58,9 @@ test('the real manifest yields unique, rooted, forward-slash paths', () => {
     assert.ok(!rels.has(a.rel), `duplicate ${a.rel}`);
     rels.add(a.rel);
     assert.ok(!a.rel.includes('\\') && !a.rel.startsWith('/') && !a.rel.split('/').includes('..'), a.rel);
-    assert.match(a.sha256, /^[0-9a-f]{64}$/);
-    assert.ok(Number.isInteger(a.size) && a.size > 0);
+    assert.ok((a.sha256 === null) !== (a.treeSha256 === null), `${a.id}: exactly one of sha256 / treeSha256`);
+    assert.match(a.sha256 ?? a.treeSha256, /^[0-9a-f]{64}$/);
+    assert.ok(Number.isInteger(a.size) && a.size > 0 && a.maxSize >= a.size);
     assert.ok(hostAllowed(a.url, real.allowedHosts), `not on allowedHosts: ${a.url}`);
   }
   assert.equal(componentsBytes(real), arts.reduce((n, a) => n + a.size, 0));

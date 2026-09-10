@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Stages every first-run component into a directory laid out exactly as the
 // app's components dir, so a copy of it lets the setup wizard finish with no
-// network. Everything is held to components.json's size + sha256; a file
-// that already verifies is left alone, so re-runs are cheap and the stage
-// doubles as the download cache.
+// network. Everything is held to components.json's size + sha256 — or, for
+// the tree-bound ComfyUI source tarball, to its treeSha256 (the digest of
+// the extracted files, scripts/tree-digest.mjs) and the app's size ceiling,
+// since GitHub may regenerate that archive's bytes. A file that already
+// verifies is left alone, so re-runs are cheap and the stage doubles as the
+// download cache.
 //
 //   node physical-release/stage-components.mjs [--out DIR]
 //        [--from-components DIR]   copy matching files (models, mostly) from an
@@ -20,6 +23,7 @@ import { Readable } from 'node:stream';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { componentArtifacts, componentsBytes, hostAllowed, fitReport, gb } from './lib/layout.mjs';
+import { treeBoundLimits, treeSha256FromTarGz } from '../scripts/tree-digest.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
@@ -61,7 +65,7 @@ for (const [i, art] of artifacts.entries()) {
   mkdirSync(dirname(dest), { recursive: true });
   if (fromComponents) {
     const src = join(fromComponents, ...art.rel.split('/'));
-    if (existsSync(src) && statSync(src).size === art.size) {
+    if (existsSync(src) && sizeAcceptable(art, statSync(src).size)) {
       process.stdout.write(`${tag}  copying from existing install… `);
       copyFileSync(src, dest + '.part');
       if (await hashMatches(dest + '.part', art)) {
@@ -105,14 +109,25 @@ process.exit(missing ? 1 : 0);
 async function checkExisting(art, dest) {
   if (!existsSync(dest)) return 'missing';
   const st = statSync(dest);
-  if (st.size !== art.size) return 'size';
+  if (!sizeAcceptable(art, st.size)) return 'size';
   const c = verified[art.rel];
-  if (!rehash && c && c.size === st.size && c.mtimeMs === st.mtimeMs && c.sha256 === art.sha256) return 'ok';
+  if (!rehash && c && c.size === st.size && c.mtimeMs === st.mtimeMs && c.sha256 === pin(art)) return 'ok';
   if (await hashMatches(dest, art)) {
     remember(art, dest);
     return 'ok';
   }
   return 'hash';
+}
+
+/** What binds the artifact: its byte hash, or the tree digest. */
+function pin(art) {
+  return art.sha256 ?? art.treeSha256;
+}
+
+/** Byte-bound: exactly the pinned size. Tree-bound: anything up to the
+ *  app's ceiling (`maxSize`), the digest decides. */
+function sizeAcceptable(art, size) {
+  return art.sha256 ? size === art.size : size > 0 && size <= art.maxSize;
 }
 
 /** Files in the stage that the current manifest does not name (left by an
@@ -128,6 +143,16 @@ function staleFiles() {
 }
 
 async function hashMatches(path, art) {
+  if (art.treeSha256) {
+    // Same digest and limits as the app. A damaged gzip, a link entry or a
+    // bomb throws: not the pinned tree, so the file is replaced like any
+    // other mismatch rather than aborting the stage.
+    try {
+      return treeSha256FromTarGz(readFileSync(path), treeBoundLimits(art.size)) === art.treeSha256;
+    } catch {
+      return false;
+    }
+  }
   const h = createHash('sha256');
   await pipeline(createReadStream(path, { highWaterMark: 4 * 1024 * 1024 }), async function* (src) {
     for await (const chunk of src) h.update(chunk);
@@ -137,19 +162,20 @@ async function hashMatches(path, art) {
 
 function remember(art, dest) {
   const st = statSync(dest);
-  verified[art.rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: art.sha256 };
+  verified[art.rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: pin(art) };
 }
 
 /** Manual redirect walk (https-only hops, first hop on allowedHosts), Range
- *  resume on a `.part` file, size cap, full-file hash before the rename. */
+ *  resume on a `.part` file, size cap, full-file hash (or tree digest)
+ *  before the rename. */
 async function download(art, dest, tag) {
   if (!hostAllowed(art.url, manifest.allowedHosts)) throw new Error(`host not allowed: ${art.url}`);
   const part = dest + '.part';
   for (let attempt = 1; attempt <= 5; attempt++) {
     const have = existsSync(part) ? statSync(part).size : 0;
-    if (have > art.size) rmSync(part);
+    if (have > art.maxSize) rmSync(part);
     try {
-      const res = await follow(art.url, have > 0 && have < art.size ? { Range: `bytes=${have}-` } : {});
+      const res = await follow(art.url, have > 0 && have < art.maxSize ? { Range: `bytes=${have}-` } : {});
       let offset = have;
       if (res.status === 200) {
         offset = 0;
@@ -158,14 +184,14 @@ async function download(art, dest, tag) {
         throw new Error(`HTTP ${res.status}`);
       }
       const len = Number(res.headers.get('content-length') ?? 0);
-      if (len && offset + len > art.size) throw new Error(`server offers ${offset + len} bytes, manifest pins ${art.size}`);
+      if (len && offset + len > art.maxSize) throw new Error(`server offers ${offset + len} bytes, manifest pins ${art.size}`);
       let done = offset;
       let lastPrint = 0;
       const started = Date.now();
       const meter = async function* (src) {
         for await (const chunk of src) {
           done += chunk.length;
-          if (done > art.size) throw new Error('response exceeds pinned size');
+          if (done > art.maxSize) throw new Error('response exceeds pinned size');
           const now = Date.now();
           if (now - lastPrint > 1000) {
             lastPrint = now;
@@ -177,16 +203,18 @@ async function download(art, dest, tag) {
       };
       await pipeline(Readable.fromWeb(res.body), meter, createWriteStream(part, { flags: offset ? 'a' : 'w' }));
       process.stdout.write('\r');
-      if (statSync(part).size !== art.size) throw new Error(`short file (${statSync(part).size} of ${art.size} bytes)`);
+      const got = statSync(part).size;
+      if (!sizeAcceptable(art, got)) throw new Error(`short file (${got} of ${art.size} bytes)`);
       if (!(await hashMatches(part, art))) {
         rmSync(part);
-        throw new Error('sha256 mismatch');
+        throw new Error(art.treeSha256 ? 'tree digest mismatch' : 'sha256 mismatch');
       }
+      if (art.treeSha256 && got !== art.size) console.warn(`\n${tag}  archive is ${got} bytes, the manifest's nominal size is ${art.size} (upstream recompressed it; the tree verifies)`);
       renameSync(part, dest);
       console.log(`${tag}  downloaded ${gb(art.size)}`);
       return;
     } catch (e) {
-      if (attempt === 5 || /host not allowed|manifest pins|exceeds pinned|sha256 mismatch/.test(e.message)) throw e;
+      if (attempt === 5 || /host not allowed|manifest pins|exceeds pinned|sha256 mismatch|tree digest mismatch/.test(e.message)) throw e;
       console.warn(`\n${tag}  attempt ${attempt} failed (${e.message}); retrying`);
       await new Promise((r) => setTimeout(r, 2000 * attempt));
     }

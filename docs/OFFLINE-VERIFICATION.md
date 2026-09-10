@@ -27,7 +27,17 @@ every network touch the app can make and how to verify there are no others.
    interpreter and each Python wheel — has an exact size and SHA-256 in
    `components.json`; the downloader accepts no more bytes than that size
    and discards anything whose hash does not match, whichever host served
-   it. Nothing is fetched before that click, and nothing is *resolved* on
+   it. The single exception is ComfyUI's source archive, which GitHub
+   generates on request and may recompress without changing its contents:
+   that item is pinned by `treeSha256`, the SHA-256 of a `sha256sum`-style
+   listing of every file it unpacks to, and its `size` is a nominal figure
+   the downloader allows to grow by up to 2×. The archive is unpacked into a
+   staging folder (links and anything but plain files and directories are
+   refused, and the unpacked bytes are capped), its listing is digested and
+   compared with the pin, and only a matching tree is moved into place; a
+   rejected archive is deleted so a retry downloads it afresh. You can
+   reproduce that digest with `node scripts/tree-digest.mjs <archive or
+   directory>`. Nothing is fetched before that click, and nothing is *resolved* on
    your machine: the Python environment is installed offline from the
    verified wheelhouse (`uv pip sync --offline --no-index --require-hashes`),
    so no package index is ever consulted.

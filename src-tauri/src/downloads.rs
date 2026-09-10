@@ -403,17 +403,20 @@ async fn attempt(
                 return Err(Halt::Failed(format!("network error: {e}")));
             }
         };
-        // Never accept more than the manifest pins, from any host: the
+        // Never accept more than the manifest allows, from any host: the
         // overrun is discarded before it touches the disk and the file is
         // started over, since this server is not sending the pinned bytes.
-        if written + chunk.len() as u64 > art.size {
+        // (A tree-bound archive has a ceiling instead of an exact size.)
+        let ceiling = art.max_size();
+        if written + chunk.len() as u64 > ceiling {
             drop(file);
             let _ = std::fs::remove_file(part);
             let _ = std::fs::remove_file(etag_file);
-            return Err(Halt::Fatal(format!(
-                "server sent more than the pinned {} bytes",
-                art.size
-            )));
+            return Err(Halt::Fatal(if art.sha256.is_some() {
+                format!("server sent more than the pinned {ceiling} bytes")
+            } else {
+                format!("server sent more than {ceiling} bytes, twice the archive's nominal size")
+            }));
         }
         hasher.update(&chunk);
         // A failed write leaves the hash ahead of the file; the carry is
@@ -443,6 +446,11 @@ async fn attempt(
 /// file, verifies size + sha256, renames atomically on success. Idempotent —
 /// an existing destination (only ever produced by that verified rename) is
 /// accepted as complete; "Verify installation" re-hashes on demand.
+/// A tree-bound archive (`Artifact::sha256` is `None`) is only held to its
+/// size ceiling here; the files it unpacks to are what the manifest binds,
+/// checked by `components::extract_item` before anything lands in place —
+/// and an archive it rejects is deleted, so the "existing destination"
+/// fast path above never pins a retry to bad bytes.
 /// `best_bps` is the session-wide throughput baseline shared between files.
 pub async fn fetch(
     art: &Artifact,
@@ -518,7 +526,11 @@ async fn fetch_with(
         {
             Ok((hasher, written)) => {
                 let got = format!("{:x}", hasher.finalize());
-                if written == art.size && got.eq_ignore_ascii_case(&art.sha256) {
+                let verified = match &art.sha256 {
+                    Some(pin) => written == art.size && got.eq_ignore_ascii_case(pin),
+                    None => written > 0,
+                };
+                if verified {
                     if let Err(e) = std::fs::rename(part, dest) {
                         break Err(e.to_string());
                     }
@@ -834,7 +846,7 @@ mod tests {
             id: "big".into(),
             url: format!("http://127.0.0.1:{port}/big.bin"),
             size: 100,
-            sha256: "0".repeat(64),
+            sha256: Some("0".repeat(64)),
             dest: dir.join("big.bin"),
         };
         let part = dir.join("big.bin.part");

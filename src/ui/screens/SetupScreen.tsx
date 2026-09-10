@@ -23,7 +23,10 @@ interface ManifestItem {
   kind: string;
   url: string;
   size: number;
-  sha256: string;
+  /** Exactly one of these pins the item: the bytes, or (for the GitHub
+   *  source tarball) the extracted files. Rust does the checking. */
+  sha256?: string;
+  treeSha256?: string;
   installPath: string;
   extract?: string;
 }

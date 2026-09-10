@@ -12,8 +12,12 @@
 // Rust downloader: the allowlist binds the pinned first hop only), and the
 // server-stated size equals the pinned size. The hosts the hops land on are
 // reported at the end so a CDN move is visible. A server that states no
-// size (GitHub's codeload streams source tarballs) gets the artifact fully
-// downloaded and hashed instead, up to a cap — nothing passes unmeasured.
+// size gets the artifact fully downloaded and hashed instead, up to a cap —
+// nothing passes unmeasured. A tree-bound item (`treeSha256`: the GitHub
+// source tarball, whose compressed bytes GitHub may regenerate) is always
+// fetched whole and its extracted files digested with scripts/tree-digest.mjs
+// exactly as the app does; a byte count that drifted from the nominal
+// `size` is reported, not failed.
 // --wheelhouse: every manifest wheel is present in that directory with the
 // pinned size and sha256, and stale files are reported (the lock generator's
 // work dir keeps wheels from earlier resolutions).
@@ -25,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TREE_BOUND_SIZE_SLACK, treeBoundLimits, treeSha256FromTarGz } from './tree-digest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(root, 'components.json'), 'utf8'));
@@ -46,6 +51,7 @@ for (const a of args) {
 }
 /** Largest artifact we will fetch whole when the server states no size. */
 const FULL_FETCH_CAP = 64 * 1024 * 1024;
+const GITHUB_GENERATED_ARCHIVE = /^https:\/\/github\.com\/[^/]+\/[^/]+\/archive\//;
 
 const problems = [];
 const fail = (msg) => problems.push(msg);
@@ -64,21 +70,26 @@ function hostAllowed(url) {
 // ---- static ---------------------------------------------------------------
 
 const artifacts = [
-  ...manifest.items.map((i) => ({ id: i.id, url: i.url, size: i.size, sha256: i.sha256, item: i })),
-  ...manifest.python.wheels.map((w) => ({ id: w.filename, url: w.url, size: w.size, sha256: w.sha256, wheel: w })),
+  ...manifest.items.map((i) => ({ id: i.id, url: i.url, size: i.size, sha256: i.sha256 ?? null, treeSha256: i.treeSha256 ?? null, item: i })),
+  ...manifest.python.wheels.map((w) => ({ id: w.filename, url: w.url, size: w.size, sha256: w.sha256 ?? null, treeSha256: null, wheel: w })),
 ];
 
 const ids = new Set();
 for (const a of artifacts) {
   if (ids.has(a.id)) fail(`duplicate id ${a.id}`);
   ids.add(a.id);
-  if (!/^[0-9a-f]{64}$/.test(a.sha256)) fail(`${a.id}: sha256 is not 64 hex chars`);
+  if ((a.sha256 === null) === (a.treeSha256 === null)) fail(`${a.id}: exactly one of sha256 / treeSha256 must be set`);
+  if (a.sha256 !== null && !/^[0-9a-f]{64}$/.test(a.sha256)) fail(`${a.id}: sha256 is not 64 hex chars`);
+  if (a.treeSha256 !== null && !/^[0-9a-f]{64}$/.test(a.treeSha256)) fail(`${a.id}: treeSha256 is not 64 hex chars`);
   if (!(Number.isInteger(a.size) && a.size > 0)) fail(`${a.id}: size must be a positive integer`);
   if (!hostAllowed(a.url)) fail(`${a.id}: ${a.url} is not https on an allowlisted host`);
 }
 for (const i of manifest.items) {
   if (!i.installPath || i.installPath.includes('..') || i.installPath.startsWith('/')) fail(`${i.id}: bad installPath`);
   if (i.extract && !['zip', 'tar.gz-strip1'].includes(i.extract)) fail(`${i.id}: unknown extract mode ${i.extract}`);
+  if (i.treeSha256 && i.extract !== 'tar.gz-strip1') fail(`${i.id}: treeSha256 binds an extracted tar.gz-strip1 tree only`);
+  // A GitHub-generated archive's bytes are not GitHub's promise; its contents are.
+  if (GITHUB_GENERATED_ARCHIVE.test(i.url) && !i.treeSha256) fail(`${i.id}: a GitHub source archive must be pinned by treeSha256, not sha256 (node scripts/tree-digest.mjs <tar.gz>)`);
   if (!i.license) fail(`${i.id}: license missing`);
 }
 for (const id of ['uv', 'python-dist', 'comfyui', 'llama-cpp', 'llama-cudart']) {
@@ -196,20 +207,24 @@ async function probe(url) {
   throw new Error(`${url}: too many redirects`);
 }
 
-/** For a server that states no size: fetch the whole artifact (already
- *  redirect-checked by probe) and measure it. */
-async function fetchAndMeasure(url, pinnedSize) {
-  if (pinnedSize > FULL_FETCH_CAP) throw new Error(`server states no size and the artifact is too large (${pinnedSize} bytes) to fetch whole`);
+/** Fetch the whole artifact (already redirect-checked by probe) and measure
+ *  it: for a server that states no size, or for a tree-bound archive whose
+ *  bytes are not what the manifest pins. `cap` is the most we will read;
+ *  with `keep` the bytes come back too, for the tree digest. */
+async function fetchAndMeasure(url, pinnedSize, { cap = FULL_FETCH_CAP, keep = false } = {}) {
+  if (pinnedSize > FULL_FETCH_CAP) throw new Error(`the artifact is too large (${pinnedSize} bytes) to fetch whole`);
   const res = await fetch(url, { redirect: 'manual' });
   if (!res.ok) throw new Error(`GET ${url} -> HTTP ${res.status}`);
   const hash = createHash('sha256');
+  const chunks = [];
   let size = 0;
   for await (const chunk of res.body) {
     hash.update(chunk);
+    if (keep) chunks.push(chunk);
     size += chunk.length;
-    if (size > FULL_FETCH_CAP) throw new Error('artifact exceeds the full-fetch cap');
+    if (size > cap) throw new Error(`artifact exceeds ${cap} bytes`);
   }
-  return { size, sha256: hash.digest('hex') };
+  return { size, sha256: hash.digest('hex'), body: keep ? Buffer.concat(chunks) : null };
 }
 
 if (network) {
@@ -220,7 +235,17 @@ if (network) {
     for (let a = queue.shift(); a; a = queue.shift()) {
       try {
         const { size, url } = await probe(a.url);
-        if (size === null) {
+        if (a.treeSha256 !== null) {
+          // The app accepts up to TREE_BOUND_SIZE_SLACK × the nominal size,
+          // unpacks within the same limits, and binds the extracted files;
+          // check exactly that, with the same digest (a throw — a link, a
+          // bomb, a damaged gzip — is reported by the catch below).
+          const got = await fetchAndMeasure(url, a.size, { cap: Math.min(FULL_FETCH_CAP, a.size * TREE_BOUND_SIZE_SLACK), keep: true });
+          const tree = treeSha256FromTarGz(got.body, treeBoundLimits(a.size));
+          if (tree !== a.treeSha256) fail(`${a.id}: fetched tree digest ${tree} does not match the manifest's treeSha256`);
+          else if (got.size !== a.size) console.warn(`${a.id}: the archive is ${got.size} bytes, the manifest's nominal size is ${a.size} — upstream recompressed it; the extracted tree still verifies, so installs are unaffected. Refresh the nominal size at the next bump.`);
+          fetchedWhole += 1;
+        } else if (size === null) {
           const got = await fetchAndMeasure(url, a.size);
           if (got.size !== a.size) fail(`${a.id}: fetched ${got.size} bytes, manifest pins ${a.size}`);
           else if (got.sha256 !== a.sha256) fail(`${a.id}: fetched sha256 ${got.sha256} does not match the manifest`);
@@ -235,7 +260,7 @@ if (network) {
     }
   });
   await Promise.all(workers);
-  console.log(`probed ${checked}/${artifacts.length} URLs${fetchedWhole ? ` (${fetchedWhole} fetched whole and hashed: no server-stated size)` : ''}`);
+  console.log(`probed ${checked}/${artifacts.length} URLs${fetchedWhole ? ` (${fetchedWhole} fetched whole and hashed: tree-bound or no server-stated size)` : ''}`);
   if (hopHosts.size) {
     console.log('redirects landed on (https, followed by the app as-is):');
     for (const [h, n] of [...hopHosts].sort((a, b) => b[1] - a[1])) console.log(`  ${h}  (${n})`);

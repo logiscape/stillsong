@@ -140,8 +140,17 @@ $compFiles = @()
 $compBytes = 0L
 foreach ($it in $manifest.items) {
   $rel = if ($it.extract) { '_downloads/' + (($it.url -split '/')[-1] -replace '%2B', '+') } else { $it.installPath }
-  $compFiles += [pscustomobject]@{ rel = $rel; size = [long]$it.size; sha256 = $it.sha256.ToLowerInvariant() }
-  $compBytes += [long]$it.size
+  if ($it.treeSha256) {
+    # A tree-bound archive (the GitHub source tarball): the manifest pins the
+    # extracted files, not the bytes, so the disc records the size and hash of
+    # the copy it actually carries (stage-components.mjs verified its tree).
+    $staged = Get-Item -LiteralPath (Join-Path $components ($rel -replace '/', '\'))
+    $compFiles += [pscustomobject]@{ rel = $rel; size = [long]$staged.Length; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $staged.FullName).Hash.ToLowerInvariant() }
+    $compBytes += [long]$staged.Length
+  } else {
+    $compFiles += [pscustomobject]@{ rel = $rel; size = [long]$it.size; sha256 = $it.sha256.ToLowerInvariant() }
+    $compBytes += [long]$it.size
+  }
 }
 foreach ($w in $manifest.python.wheels) {
   $compFiles += [pscustomobject]@{ rel = ($manifest.python.wheelhouse.TrimEnd('/') + '/' + $w.filename); size = [long]$w.size; sha256 = $w.sha256.ToLowerInvariant() }

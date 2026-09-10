@@ -5,6 +5,8 @@
 // `archive_basename`). If those rules change, `layout.test.mjs` is where the
 // mismatch should show up first.
 
+import { TREE_BOUND_SIZE_SLACK } from '../../scripts/tree-digest.mjs';
+
 /** Blu-ray capacities in bytes (2048-byte sectors). Single-layer BD-R is
  *  25,025,314,816 bytes, not 25 × 10^9. */
 export const MEDIA = [
@@ -46,7 +48,9 @@ export function componentArtifacts(manifest) {
       kind: it.kind,
       url: it.url,
       size: it.size,
-      sha256: it.sha256.toLowerCase(),
+      sha256: it.sha256 ? it.sha256.toLowerCase() : null,
+      treeSha256: it.treeSha256 ? it.treeSha256.toLowerCase() : null,
+      maxSize: it.treeSha256 ? it.size * TREE_BOUND_SIZE_SLACK : it.size,
       rel: it.extract ? `_downloads/${archiveBasename(it.url)}` : it.installPath,
     });
   }
@@ -58,11 +62,21 @@ export function componentArtifacts(manifest) {
       url: w.url,
       size: w.size,
       sha256: w.sha256.toLowerCase(),
+      treeSha256: null,
+      maxSize: w.size,
       rel: `${wheelhouse}/${w.filename}`,
     });
   }
   return out;
 }
+
+/** A tree-bound archive (`treeSha256`: the GitHub source tarball, pinned by
+ *  its extracted files because GitHub may regenerate the compressed bytes)
+ *  has a nominal `size`; the app accepts up to this many times it
+ *  (`TREE_BOUND_SIZE_SLACK` in src-tauri/src/manifest.rs, mirrored once in
+ *  scripts/tree-digest.mjs). Every other artifact's `size` is exact and its
+ *  `sha256` binds the bytes. */
+export { TREE_BOUND_SIZE_SLACK };
 
 export function componentsBytes(manifest) {
   return componentArtifacts(manifest).reduce((n, a) => n + a.size, 0);

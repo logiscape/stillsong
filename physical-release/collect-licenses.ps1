@@ -99,7 +99,7 @@ try {
       "$($item.id)",
       "License: $lic",
       "Fetched from: $($item.url)",
-      "sha256: $($item.sha256)",
+      $(if ($item.treeSha256) { "treeSha256 (digest of the extracted files): $($item.treeSha256)" } else { "sha256: $($item.sha256)" }),
       "",
       "License files found inside the archive: $found"
     )

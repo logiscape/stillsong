@@ -25,9 +25,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The Node mirrors of the Rust manifest logic (tree digest, on-media
+      # layout) pinned to the same fixtures the cargo tests use.
+      - run: node --test scripts/tree-digest.test.mjs physical-release/lib/layout.test.mjs
       # Static + network checks on the pinned manifest: hashes well-formed,
       # every pinned URL on the allowlist, every redirect hop https, sizes as
-      # stated; reports which CDN hosts the hops land on.
+      # stated, the tree-bound ComfyUI tarball fetched and digested; reports
+      # which CDN hosts the hops land on.
       # The offline bootstrap itself runs in first-run.yml.
       - run: node scripts/check-manifest.mjs
 

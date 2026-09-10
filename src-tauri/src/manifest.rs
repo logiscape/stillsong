@@ -53,8 +53,24 @@ pub struct Item {
     #[allow(dead_code)]
     pub kind: String,
     pub url: String,
+    /// Exact byte count of the download — or, for a tree-bound archive, the
+    /// nominal size at pin time (the downloader accepts up to
+    /// `TREE_BOUND_SIZE_SLACK` times it).
     pub size: u64,
-    pub sha256: String,
+    /// sha256 of the downloaded bytes. Exactly one of `sha256` and
+    /// `tree_sha256` is set.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// For a GitHub-generated source tarball (`.../archive/<commit>.tar.gz`):
+    /// the digest of the *extracted* files (`components::tree_sha256`, the
+    /// sha256 of a `sha256sum`-style listing of every regular file). GitHub
+    /// guarantees the contents of a commit archive but not its compressed
+    /// bytes — it regenerated every tarball in January 2023 and reserves the
+    /// right to do so again — so binding the bytes would let an upstream
+    /// recompression break fresh installs of a Stillsong release that never
+    /// updates itself. Requires `extract: "tar.gz-strip1"`.
+    #[serde(default)]
+    pub tree_sha256: Option<String>,
     pub install_path: String,
     /// "zip" | "tar.gz-strip1" for archives that are extracted from
     /// `_downloads/`; absent for files that land directly at `install_path`.
@@ -62,14 +78,63 @@ pub struct Item {
     pub extract: Option<String>,
 }
 
+/// How much larger than its nominal `size` a tree-bound archive may come
+/// back: a recompression moves the byte count by a few percent, so twice is
+/// generous, while still cutting off a runaway stream. Mirrored by
+/// `maxSize` in physical-release/lib/layout.mjs and scripts/check-manifest.mjs.
+pub const TREE_BOUND_SIZE_SLACK: u64 = 2;
+
+/// Unpack bounds for a tree-bound archive, whose bytes are unverified until
+/// its files exist on disk: the entries' data may total at most this many
+/// times the nominal `size` (a source tree expands about 4×), and there may
+/// be at most `TREE_BOUND_MAX_ENTRIES` of them, so a decompression bomb is
+/// cut off long before the digest gets to refuse it. Mirrored by
+/// scripts/tree-digest.mjs.
+pub const TREE_BOUND_UNPACK_SLACK: u64 = 64;
+pub const TREE_BOUND_MAX_ENTRIES: u64 = 100_000;
+
+/// What `components::unpack_tar_strip1` enforces on an archive it cannot
+/// trust yet (see `Item::unpack_limits`).
+pub struct UnpackLimits {
+    pub max_bytes: u64,
+    pub max_entries: u64,
+}
+
+impl UnpackLimits {
+    /// The most decompressed bytes the tar parser may be fed at all:
+    /// entry data plus 2 KiB of header, extended-header and padding
+    /// overhead per entry. tar-rs buffers pax records and GNU long names in
+    /// memory before it yields the entry they belong to, so a cap on yielded
+    /// entries alone would not stop a bomb hidden in metadata. Mirrored by
+    /// scripts/tree-digest.mjs (`maxOutputLength`).
+    pub fn max_stream_bytes(&self) -> u64 {
+        self.max_bytes
+            .saturating_add(self.max_entries.saturating_mul(2048))
+    }
+}
+
 /// One downloadable blob resolved against a components dir.
 pub struct Artifact {
     pub id: String,
     pub url: String,
     pub size: u64,
-    pub sha256: String,
+    /// Pinned sha256 of the bytes. `None` for a tree-bound archive: its
+    /// bytes are accepted up to `max_size()` and bound when it is unpacked
+    /// (`components::extract_item`).
+    pub sha256: Option<String>,
     /// Where the verified file lands.
     pub dest: PathBuf,
+}
+
+impl Artifact {
+    /// The most bytes the downloader will write for this artifact.
+    pub fn max_size(&self) -> u64 {
+        if self.sha256.is_some() {
+            self.size
+        } else {
+            self.size.saturating_mul(TREE_BOUND_SIZE_SLACK)
+        }
+    }
 }
 
 pub fn manifest() -> &'static Manifest {
@@ -114,6 +179,16 @@ impl Item {
     pub fn install_dest(&self, comp: &Path) -> PathBuf {
         join_rel(comp, &self.install_path)
     }
+
+    /// `Some` for a tree-bound archive: it is unpacked before it is
+    /// verified, so the unpacker must bound it. A byte-bound archive was
+    /// authenticated by the downloader and needs no limits.
+    pub fn unpack_limits(&self) -> Option<UnpackLimits> {
+        self.tree_sha256.as_ref().map(|_| UnpackLimits {
+            max_bytes: self.size.saturating_mul(TREE_BOUND_UNPACK_SLACK),
+            max_entries: TREE_BOUND_MAX_ENTRIES,
+        })
+    }
 }
 
 /// Looks up an artifact by id: a manifest item id, or a wheel filename.
@@ -133,7 +208,7 @@ pub fn artifact(comp: &Path, id: &str) -> Option<Artifact> {
         id: w.filename.clone(),
         url: w.url.clone(),
         size: w.size,
-        sha256: w.sha256.clone(),
+        sha256: Some(w.sha256.clone()),
         dest: wheelhouse_dir(comp).join(&w.filename),
     })
 }
@@ -218,7 +293,19 @@ mod tests {
         assert_eq!(ids.len(), n, "artifact ids must be unique");
         let hex = |s: &str| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
         for i in &m.items {
-            assert!(hex(&i.sha256), "{}: bad sha256", i.id);
+            match (&i.sha256, &i.tree_sha256) {
+                (Some(s), None) => assert!(hex(s), "{}: bad sha256", i.id),
+                (None, Some(t)) => {
+                    assert!(hex(t), "{}: bad treeSha256", i.id);
+                    assert_eq!(
+                        i.extract.as_deref(),
+                        Some("tar.gz-strip1"),
+                        "{}: treeSha256 binds an extracted tar.gz tree only",
+                        i.id
+                    );
+                }
+                _ => panic!("{}: exactly one of sha256 / treeSha256", i.id),
+            }
             assert!(i.size > 0, "{}: size", i.id);
             assert!(
                 host_allowed(&url(&i.url)),
@@ -245,6 +332,27 @@ mod tests {
             "python.version must be an exact patch"
         );
         assert!(item("uv").is_some() && item("python-dist").is_some() && item("comfyui").is_some());
+    }
+
+    #[test]
+    fn comfyui_is_tree_bound_and_the_rest_byte_bound() {
+        // The one GitHub-generated source archive is pinned by its extracted
+        // files; every release asset, model and wheel by its exact bytes.
+        let comp = Path::new(r"C:\c");
+        for i in &manifest().items {
+            let art = artifact(comp, &i.id).unwrap();
+            if i.id == "comfyui" {
+                assert!(i.url.contains("/archive/"), "{}", i.url);
+                assert!(art.sha256.is_none());
+                assert_eq!(art.max_size(), i.size * TREE_BOUND_SIZE_SLACK);
+            } else {
+                assert!(!i.url.contains("/archive/"), "{}: {}", i.id, i.url);
+                assert!(art.sha256.is_some(), "{}", i.id);
+                assert_eq!(art.max_size(), i.size);
+            }
+        }
+        let w = artifact(comp, &manifest().python.wheels[0].filename).unwrap();
+        assert!(w.sha256.is_some());
     }
 
     #[test]
