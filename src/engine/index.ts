@@ -265,6 +265,32 @@ export class Engine {
   }
 
   /**
+   * Send a failed render back to the studio as the same song: same id, spec,
+   * parent and forced prefix, so a remix or enhance that died in ComfyUI
+   * (a transient VRAM fault, a crashed process) is retried without the user
+   * rebuilding their edit. The song row is reused rather than cloned — a
+   * failed row is invisible in the library, and cloning would leave it behind.
+   */
+  async retrySong(songId: string): Promise<Song> {
+    const song = await this.songs.byId(songId);
+    if (!song) throw new Error('That song is no longer here.');
+    if (song.status !== 'failed') throw new Error('Only a song that failed can be retried.');
+    // The job row is the acceptance point: once it exists the runner will pick
+    // it up and mark the song running itself. So the status write comes after
+    // it (a queued song with no job would be stranded and refuse every later
+    // retry) and its failure is not reported — the retry has already happened,
+    // and rejecting here would leave the UI showing "Try again" over a render
+    // that is in progress.
+    await this.jobs.enqueue(song.id, this.ports.clock.now());
+    await this.songs.setStatus(song.id, 'queued').catch(() => {});
+    this.emit({ kind: 'queue_changed' });
+    void this.pump();
+    // No further database read: the retry is accepted, and a rejected read
+    // here would report it as failed. The row is what the write made it.
+    return { ...song, status: 'queued', error: undefined };
+  }
+
+  /**
    * "Enhance quality": re-render a song at the 'enhanced' step count as a new
    * version beside it, like any remix. Only the sampler changes — same seed,
    * same cap, and the saved composition is teacher-forced in full when it

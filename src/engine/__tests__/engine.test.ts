@@ -1,7 +1,7 @@
 // Engine job pipeline against in-process fakes (see fakes.ts). The WS never
 // connects, so these paths run on the history-poll fallback.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Engine } from '@engine/index';
 import { RENDER_STEPS, canEnhance, defaultSpec, isEnhanceOf } from '@engine/domain/types';
 import { flush, makePorts } from './fakes';
@@ -95,6 +95,72 @@ describe('Engine job pipeline', () => {
     const failed = await engine.songs.byId(song.id);
     expect(failed?.status).toBe('failed');
     expect(failed?.error).toBe('KSampler: OOM: out of memory');
+  });
+
+  it('retries a failed song as the same song, with its prefix and parent intact', async () => {
+    const { ports, world, clock } = makePorts();
+    const engine = await Engine.create(ports);
+    const events: string[] = [];
+    engine.on((e) => events.push(e.kind));
+    const parent = await engine.enqueueSong(spec());
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+
+    // A same-seed remix that teacher-forces the parent, failing in ComfyUI.
+    world.historyStatus = 'running';
+    const remix = await engine.enqueueSong({ ...spec(), lyrics: '[verse]\nhello\n\n[chorus]\nnew' }, parent.id, { songId: parent.id, frames: 100 });
+    await flush();
+    world.historyStatus = 'error';
+    await clock.advance(10_000);
+    expect((await engine.songs.byId(remix.id))?.status).toBe('failed');
+    const submitsBefore = world.events.filter((e) => e === 'submit').length;
+
+    await expect(engine.retrySong(parent.id)).rejects.toThrow(/failed/);
+    world.historyStatus = 'running';
+    const retried = await engine.retrySong(remix.id);
+    expect(retried.id).toBe(remix.id);
+    expect(retried.status).toBe('queued');
+    expect(retried.error).toBeUndefined();
+    await flush();
+    expect(world.events.filter((e) => e === 'submit').length).toBe(submitsBefore + 1);
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+
+    const done = await engine.songs.byId(remix.id);
+    expect(done?.status).toBe('done');
+    expect(done?.parentId).toBe(parent.id);
+    expect(done?.prefixSongId).toBe(parent.id);
+    expect(done?.prefixFrames).toBe(100);
+    expect(done?.outputPath).toBe(`C:\\lib\\songs/${remix.id}.mp3`);
+    expect(events.filter((e) => e === 'song_failed')).toHaveLength(1);
+    expect(events.filter((e) => e === 'song_done')).toHaveLength(2);
+    expect(await engine.jobs.active()).toEqual([]);
+  });
+
+  it('a retry is accepted once its job exists: a failed status write neither rejects nor strands the song', async () => {
+    const { ports, world, clock } = makePorts();
+    const engine = await Engine.create(ports);
+    const song = await engine.enqueueSong(spec());
+    await flush();
+    world.historyStatus = 'error';
+    await clock.advance(10_000);
+    expect((await engine.songs.byId(song.id))?.status).toBe('failed');
+
+    world.historyStatus = 'running';
+    const setStatus = vi.spyOn(engine.songs, 'setStatus').mockRejectedValueOnce(new Error('database is locked'));
+    // Accepted, not an error: the caller shows progress, and the runner marks
+    // the song running when it picks the job up.
+    const retried = await engine.retrySong(song.id);
+    expect(retried.id).toBe(song.id);
+    setStatus.mockRestore();
+    await flush();
+    world.historyStatus = 'success';
+    await clock.advance(10_000);
+    await flush();
+    expect((await engine.songs.byId(song.id))?.status).toBe('done');
   });
 
   it('cancels queued jobs and deletes songs with their files', async () => {

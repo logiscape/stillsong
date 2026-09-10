@@ -42,6 +42,8 @@ export interface AppState {
   creation: CreationState | null;
   /** Sticky failure from the last creation attempt (the Create flow shows it). */
   creationError: string | null;
+  /** The song whose render failed, when one exists — it can be sent back to the studio as is. */
+  failedSong: Song | null;
   /** Photo chosen on the Create screen, imported immediately (thumb + ambiance ready). */
   pendingPhoto: PhotoAsset | null;
   playback: PlaybackState | null;
@@ -62,6 +64,7 @@ let state: AppState = {
   activeJobs: [],
   creation: null,
   creationError: null,
+  failedSong: null,
   pendingPhoto: null,
   playback: null,
   settings: null,
@@ -233,11 +236,13 @@ export async function bootstrap(created: Engine): Promise<void> {
         // The drawing's job is done once the song exists; a failed render
         // keeps pendingPhoto (and the paint session with it) for the retry.
         clearPaintSession();
-        setState({ creation: null, creationError: null, pendingPhoto: null, selectedSongId: e.song.id, screen: 'song', autoplayOnOpen: true });
+        setState({ creation: null, creationError: null, failedSong: null, pendingPhoto: null, selectedSongId: e.song.id, screen: 'song', autoplayOnOpen: true });
         void refreshLists();
         break;
       case 'song_failed':
-        setState({ creation: null, creationError: e.song.error ?? 'Something went wrong.', screen: 'create' });
+        // The failed row keeps its spec, parent and prefix, so the Create flow
+        // can offer to send that exact render back to the studio.
+        setState({ creation: null, creationError: e.song.error ?? 'Something went wrong.', failedSong: e.song, screen: 'create' });
         void refreshLists();
         break;
     }
@@ -292,7 +297,7 @@ export function setError(message: string | null): void {
 /** Import the chosen photo right away: preview, thumbnail and ambiance land before creation. */
 export async function choosePhoto(path: string): Promise<void> {
   try {
-    setState({ creationError: null });
+    setState({ creationError: null, failedSong: null });
     const photo = await getEngine().importPhoto(path);
     clearPaintSession(); // a photo replaces any in-progress drawing
     setState({ pendingPhoto: photo });
@@ -304,7 +309,7 @@ export async function choosePhoto(path: string): Promise<void> {
 /** Import a finished canvas drawing (PNG base64) exactly like a chosen photo. */
 export async function chooseDrawing(b64Png: string): Promise<void> {
   try {
-    setState({ creationError: null });
+    setState({ creationError: null, failedSong: null });
     const photo = await getEngine().importDrawing(b64Png);
     setState({ pendingPhoto: photo });
   } catch (err) {
@@ -326,7 +331,7 @@ export async function createFromPhoto(
   const photo = state.pendingPhoto;
   if (!photo) return;
   try {
-    setState({ creationError: null, creation: { stage: 'preparing', photo } });
+    setState({ creationError: null, failedSong: null, creation: { stage: 'preparing', photo } });
     await getEngine().createFromPhoto({ photoPath: photo.localPath, photoId: photo.id, vocalPref, genreHint, language });
   } catch (err) {
     setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
@@ -336,10 +341,29 @@ export async function createFromPhoto(
 /** Remix / edited-spec render (no LLM stages; parented to the original). */
 export async function enqueueRemix(spec: SongSpec, parentId: string, prefix?: RenderPrefix): Promise<void> {
   try {
-    setState({ creationError: null, creation: { stage: 'studio', title: spec.title, photo: spec.photo }, screen: 'create' });
+    setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: spec.title, photo: spec.photo }, screen: 'create' });
     await getEngine().enqueueSong(spec, parentId, prefix);
   } catch (err) {
     setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
+ * "Try again" after a render failed in the studio: the same song (same spec,
+ * seed, parent and forced prefix) goes back to the queue, so a remix or
+ * enhance that hit a transient ComfyUI fault is not rebuilt by hand.
+ */
+export async function retryFailedSong(): Promise<void> {
+  const song = state.failedSong;
+  if (!song) return;
+  try {
+    setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
+    await getEngine().retrySong(song.id);
+  } catch (err) {
+    // The engine only rejects before the job exists (song gone, not failed,
+    // or the job insert itself failed), so nothing is running: keep the offer
+    // rather than send the user back to rebuild the edit by hand.
+    setState({ creation: null, failedSong: song, creationError: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -373,7 +397,7 @@ export async function rerunLonger(song: Song, extraSec = 30): Promise<void> {
  */
 export async function enhanceSong(song: Song): Promise<void> {
   try {
-    setState({ creationError: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
+    setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
     await getEngine().enhanceSong(song.id);
   } catch (err) {
     setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });

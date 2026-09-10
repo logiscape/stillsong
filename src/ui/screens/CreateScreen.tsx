@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { AUDIO_FRAMES_PER_SECOND } from '@engine/domain/types';
 import {
-  choosePhoto, clearPhoto, createFromPhoto, navigate, photoSrc, useAppState, type CreationState,
+  choosePhoto, clearPhoto, createFromPhoto, navigate, photoSrc, retryFailedSong, useAppState, type CreationState,
 } from '@state/store';
 import { getPaintSession } from '@state/paintSession';
 import { pickPhotoPath } from '@ui/ds/pickFiles';
@@ -100,7 +100,12 @@ export function CreateScreen(): React.ReactElement {
 
   if (s.creation) return <StatusExperience creation={s.creation} />;
 
-  const failed = s.creationError !== null && s.pendingPhoto !== null;
+  // A render that died in the studio keeps its song row (spec, seed, parent,
+  // forced prefix), so "Try again" re-queues that exact song — for a remix,
+  // enhance or "let it finish" there is no photo to start over from. A photo
+  // creation that failed before a song existed starts the pipeline over.
+  const retryable = s.creationError !== null && s.failedSong !== null;
+  const failed = s.creationError !== null && (s.pendingPhoto !== null || retryable);
   const ambient = s.pendingPhoto?.dominantColor;
 
   return (
@@ -111,10 +116,17 @@ export function CreateScreen(): React.ReactElement {
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         {failed && (
           <div style={{ marginBottom: 'var(--space-7)' }}>
-            <Notice tone="error" title="Something went wrong while writing your song"
-              action="Try again" onAction={() => void createFromPhoto(voice, hint.trim() || undefined, lang)}>
-              Nothing was lost — your photo and your choices are still here.
-            </Notice>
+            {retryable ? (
+              <Notice tone="error" title="Something went wrong in the studio"
+                action="Try again" onAction={() => void retryFailedSong()}>
+                Nothing was lost — your song is still here, ready for another pass.
+              </Notice>
+            ) : (
+              <Notice tone="error" title="Something went wrong while writing your song"
+                action="Try again" onAction={() => void createFromPhoto(voice, hint.trim() || undefined, lang)}>
+                Nothing was lost — your photo and your choices are still here.
+              </Notice>
+            )}
             <div style={{ marginTop: 'var(--space-4)' }}>
               <Button variant="quiet" onClick={() => setShowDetail(!showDetail)}>{showDetail ? 'hide details' : 'details'}</Button>
               {showDetail && (
@@ -125,7 +137,7 @@ export function CreateScreen(): React.ReactElement {
             </div>
           </div>
         )}
-        {s.creationError && !s.pendingPhoto && (
+        {s.creationError && !failed && (
           <div style={{ marginBottom: 'var(--space-7)' }}>
             <Notice tone="error" title="Something went wrong">{s.creationError}</Notice>
           </div>
