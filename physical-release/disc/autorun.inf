@@ -1,0 +1,5 @@
+[autorun]
+label=Stillsong
+icon=Stillsong.ico
+shellexecute=Install-Stillsong.cmd
+action=Install Stillsong from this disc

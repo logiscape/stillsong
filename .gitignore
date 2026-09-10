@@ -7,3 +7,9 @@ CLAUDE.local.md
 
 # release-time Python lock work dir (scripts/lock-python.mjs)
 .lock-work/
+
+# disc images, model weights and wheels never belong in the repo (physical-release/ stages them under its out/)
+*.iso
+*.gguf
+*.safetensors
+*.whl

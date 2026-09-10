@@ -1,0 +1,58 @@
+{
+  "notes": "License texts that do not travel inside any component archive or wheel and therefore have to be fetched separately for the physical release. Pinned by URL + size + sha256 like components.json; collect-licenses.ps1 refuses a mismatch. `dest` is relative to the disc's licenses/ folder.",
+  "extra": [
+    {
+      "id": "uv-license-mit",
+      "appliesTo": ["uv"],
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.6/LICENSE-MIT",
+      "size": 1077,
+      "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
+      "dest": "runtimes/uv/LICENSE-MIT.txt",
+      "note": "The uv release zip contains only the executable; uv is dual-licensed MIT / Apache-2.0."
+    },
+    {
+      "id": "uv-license-apache",
+      "appliesTo": ["uv"],
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.6/LICENSE-APACHE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "dest": "runtimes/uv/LICENSE-APACHE.txt"
+    },
+    {
+      "id": "llama-cpp-license",
+      "appliesTo": ["llama-cpp", "llama-cudart"],
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b10643/LICENSE",
+      "size": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "dest": "runtimes/llama-cpp/LICENSE.txt",
+      "note": "The win-cuda release zip carries only the LLVM OpenMP notice, not llama.cpp's own MIT license."
+    },
+    {
+      "id": "minimax-music3-license",
+      "appliesTo": ["music-dit", "music-text-encoder", "music-vae"],
+      "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/resolve/fbdf52fbaaca799592917417eb05f1899f1255ec/LICENSE",
+      "size": 7373,
+      "sha256": "b21d12df2adae59dad3fcf80c1d81492654c662342f497d9a9770198c9317e58",
+      "dest": "models/MiniMax-Music3/LICENSE.txt",
+      "note": "The Comfy-Org repack repository carries no license file (its apache-2.0 tag is a mislabel, see THIRD-PARTY-NOTICES.md); the weights are governed by this Community License from the original model repository. Its section 1 requires the notice to accompany every copy."
+    },
+    {
+      "id": "apache-2.0",
+      "appliesTo": ["gemma-model", "gemma-mmproj"],
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "dest": "models/Gemma-4/LICENSE-Apache-2.0.txt",
+      "note": "Gemma 4 is released under Apache 2.0 (ai.google.dev/gemma/apache_2); the GGUF repository ships no license file, so the canonical text is included alongside a NOTICE written by collect-licenses.ps1."
+    },
+    {
+      "id": "nvidia-cuda-eula",
+      "appliesTo": ["llama-cudart", "torch"],
+      "url": "https://docs.nvidia.com/cuda/pdf/EULA.pdf",
+      "size": 228421,
+      "sha256": "4f51a4318e8f7d86070e9c35f9797d233af23e4b6f9d42127704325b92dfc217",
+      "dest": "runtimes/NVIDIA-CUDA/EULA.pdf",
+      "note": "Governs cudart and the other CUDA runtime DLLs inside the llama.cpp cudart zip and the PyTorch wheel. This URL is not versioned: NVIDIA republishes the PDF with each toolkit release, so expect to refresh size + sha256 when the build reports a mismatch."
+    }
+  ]
+}
