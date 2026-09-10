@@ -4,13 +4,25 @@
 // downloader fetches exactly these wheels (URL + size + sha256), and uv
 // installs them offline from the local wheelhouse with --require-hashes.
 //
-//   node scripts/lock-python.mjs [--uv <uv.exe>] [--work <dir>]
+//   node scripts/lock-python.mjs [--uv <uv.exe>] [--work <dir>] [--freeze]
 //
 // Needs the network (PyPI, download.pytorch.org, GitHub). Uses the SAME uv
 // release the manifest ships (downloaded + hash-checked into the work dir
 // unless --uv points at one) and the SAME python-build-standalone tarball, so
 // the resolution the user gets is the one this script produced. Run it after
 // every ComfyUI bump; commit components.json and docs/THIRD-PARTY-PYTHON.md.
+//
+// --freeze feeds every wheel already in components.json back in as a
+// `name==version` constraint, so a re-lock that only changes the manifest
+// (a new python.exclude entry, say) reproduces the current resolution
+// instead of picking up whatever PyPI published since. Never use it for a
+// ComfyUI bump: the new requirements must be free to move.
+//
+// python.exclude (hand-maintained in the manifest) names packages that the
+// resolution contains but the wheelhouse must not: they are dropped AFTER
+// `uv pip compile`, so the resolver still sees them (their own dependencies,
+// if any, stay), and a name the resolution does not contain is an error —
+// a stale entry after a ComfyUI bump fails loudly instead of doing nothing.
 //
 // Rules enforced here (the interim design would only have hashed an index
 // resolution; this pins the actual blobs):
@@ -40,9 +52,10 @@ const flag = (name) => {
   return v;
 };
 for (const a of args) {
-  if (a.startsWith('--') && !['--uv', '--work'].includes(a)) throw new Error(`unknown option ${a}`);
+  if (a.startsWith('--') && !['--uv', '--work', '--freeze'].includes(a)) throw new Error(`unknown option ${a}`);
 }
 const work = resolve(flag('--work') ?? join(root, '.lock-work'));
+const freeze = args.includes('--freeze');
 
 const PYPI_SIMPLE = 'https://pypi.org/simple';
 const TORCH_INDEX = 'https://download.pytorch.org/whl/cu130';
@@ -60,6 +73,17 @@ const pyVersion = manifest.python.version;
 if (!/^\d+\.\d+\.\d+$/.test(pyVersion)) throw new Error(`python.version must be an exact patch, got "${pyVersion}"`);
 const pyTag = `cp${pyVersion.split('.').slice(0, 2).join('')}`; // cp312
 const pyMinor = Number(pyVersion.split('.')[1]);
+
+/** PEP 503 name normalisation — the key space of the lock below. */
+const normalize = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
+
+// Packages the resolution may contain but the wheelhouse must not (python.exclude).
+const excludeRaw = manifest.python.exclude ?? [];
+if (!Array.isArray(excludeRaw) || excludeRaw.some((e) => typeof e !== 'string' || !e.trim())) {
+  throw new Error('python.exclude must be an array of package names');
+}
+const exclude = excludeRaw.map(normalize);
+if (new Set(exclude).size !== exclude.length) throw new Error('python.exclude lists a package twice');
 
 mkdirSync(work, { recursive: true });
 
@@ -194,9 +218,17 @@ await download(reqUrl, reqPath);
 const reqSha = sha256File(reqPath);
 
 // Hand-maintained pins for what ComfyUI leaves open (python.constraints).
+// With --freeze, every wheel of the current lock is added as a pin too, so
+// the resolution cannot drift (the hand constraints come first and win any
+// disagreement by failing the resolve, which is the right outcome).
 const constraints = manifest.python.constraints ?? [];
+const handPinned = new Set(constraints.map((c) => normalize(c.split('==')[0])));
+const frozen = freeze
+  ? (manifest.python.wheels ?? []).filter((w) => !handPinned.has(normalize(w.name))).map((w) => `${w.name}==${w.version}`)
+  : [];
+if (freeze) console.log(`freezing ${frozen.length} pins from the current lock (--freeze)`);
 const constraintsPath = join(work, 'constraints.txt');
-writeFileSync(constraintsPath, `${constraints.join('\n')}\n`);
+writeFileSync(constraintsPath, `${[...constraints, ...frozen].join('\n')}\n`);
 
 const lockPath = join(work, 'requirements.lock');
 console.log(`resolving with uv pip compile (constraints: ${constraints.join(', ') || 'none'})`);
@@ -229,7 +261,7 @@ const locked = new Map();
     const pin = /^([A-Za-z0-9._-]+)==(\S+)$/.exec(line);
     if (pin) {
       current = { version: pin[2], hashes: new Set() };
-      locked.set(pin[1].toLowerCase().replace(/[-_.]+/g, '-'), current);
+      locked.set(normalize(pin[1]), current);
       continue;
     }
     const h = /^--hash=sha256:([0-9a-f]{64})$/i.exec(line);
@@ -238,6 +270,16 @@ const locked = new Map();
   }
 }
 console.log(`${locked.size} packages resolved`);
+
+// Drop python.exclude from the resolution before anything is fetched. Each
+// entry must have been resolved: an excluded name the resolver no longer
+// produces is a stale entry, not a no-op.
+for (const name of exclude) {
+  const hit = locked.get(name);
+  if (!hit) throw new Error(`python.exclude lists "${name}" but the resolution does not contain it — stale entry?`);
+  console.log(`excluding ${name}==${hit.version} (python.exclude)`);
+  locked.delete(name);
+}
 
 // ---- 3. pick the exact file per package, download, hash, read license ------
 
@@ -284,6 +326,7 @@ manifest.python = {
   version: pyVersion,
   notes: manifest.python.notes,
   constraints,
+  exclude: excludeRaw,
   lockedAt: today,
   lockedWith: `uv ${uvVersion}`,
   requirementsSha256: reqSha,
@@ -294,6 +337,11 @@ writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
 const totalBytes = wheels.reduce((s, w) => s + w.size, 0);
 const rows = wheels.map((w) => `| ${w.name} | ${w.version} | ${w.license} | ${w.source} |`).join('\n');
+const excludedNote = exclude.length === 0 ? '' : `
+ComfyUI's requirements also resolve ${exclude.length} package${exclude.length === 1 ? '' : 's'} that Stillsong
+deliberately does not ship (\`python.exclude\` in \`components.json\`, which
+says why): ${exclude.map((e) => `\`${e}\``).join(', ')}.
+`;
 writeFileSync(join(root, 'docs', 'THIRD-PARTY-PYTHON.md'), `# Python packages installed at first run
 
 Generated by \`node scripts/lock-python.mjs\` on ${today} — do not edit by hand.
@@ -304,7 +352,7 @@ per file (URL, size, SHA-256) in \`components.json\`. Licenses are read from
 each wheel's own METADATA. The CUDA runtime libraries inside the PyTorch
 wheels are governed by the NVIDIA CUDA Toolkit EULA (see
 THIRD-PARTY-NOTICES.md).
-
+${excludedNote}
 | Package | Version | License | Source |
 |---|---|---|---|
 ${rows}

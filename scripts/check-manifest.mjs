@@ -116,6 +116,16 @@ for (const c of py.constraints ?? []) {
     if (w && w.version !== m[2]) fail(`constraint ${c} but the lock has ${w.name}==${w.version} — re-run npm run lock:python`);
   }
 }
+// python.exclude: packages the resolution contains but the wheelhouse must not.
+if (py.exclude !== undefined && !Array.isArray(py.exclude)) fail('python.exclude must be an array');
+const excluded = new Set();
+for (const e of Array.isArray(py.exclude) ? py.exclude : []) {
+  if (typeof e !== 'string' || !e.trim()) { fail(`python.exclude entry ${JSON.stringify(e)} is not a package name`); continue; }
+  const name = e.toLowerCase().replace(/[-_.]+/g, '-');
+  if (excluded.has(name)) fail(`python.exclude lists ${e} twice`);
+  excluded.add(name);
+  if (names.has(name)) fail(`python.exclude names ${e} but the lock still ships it — re-run npm run lock:python`);
+}
 
 // ---- wheelhouse -----------------------------------------------------------
 

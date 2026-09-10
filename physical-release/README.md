@@ -35,7 +35,7 @@ X:\
     components.json                  the pinned component manifest this build was made from
   components\              laid out exactly like the app's components dir (see below)
     _downloads\<archives>            uv, CPython, ComfyUI source, llama.cpp, cudart
-    _downloads\wheelhouse\*.whl      the 85 pinned wheels
+    _downloads\wheelhouse\*.whl      the 80 pinned wheels
     models\*.gguf                    Gemma 4 (already at its install path)
     comfy-data\models\...            MiniMax Music 3 (already at its install path)
   licenses\                see collect-licenses.ps1
@@ -92,12 +92,14 @@ process untouched:
 - ~55 GB free under `physical-release\out\` (25 GB staged components, and a
   25 GB `.iso` if you write one). The stage doubles as the download cache
   and survives runs.
-- A Blu-ray recorder and blank **BD-R DL (50 GB)** media for burning. Use HTL
-  (inorganic) or M-DISC discs, not LTH. Single-layer 25 GB discs are
-  25,025,314,816 bytes; the current component set is 24,890,098,503 bytes,
-  which leaves about 135 MB for everything else before file-system overhead.
-  It fits today with the stock installer and nothing to spare, and the next
-  manifest bump will not. The build refuses a medium the payload does not fit.
+- A Blu-ray recorder and blank **BD-R** media for burning. Use HTL (inorganic)
+  or M-DISC discs, not LTH. Single-layer 25 GB discs are 25,025,314,816 bytes;
+  the current component set is 24,446,255,715 bytes (the five ComfyUI
+  template-gallery media wheels, 444 MB, are excluded via `python.exclude`),
+  which leaves about 579 MB for everything else, or about 512 MB after the
+  64 MiB file-system reserve. Single layer fits today with the stock installer
+  and licenses; a model bump of any size will push it to **BD-R DL (50 GB)**.
+  The build refuses a medium the payload does not fit.
 - For USB: a 32 GB or larger drive formatted **exFAT or NTFS** (FAT32 cannot
   hold the 9.2 GB text encoder).
 - A code-signing certificate and the local, uncommitted
@@ -187,7 +189,7 @@ when the first disc ships. Per license:
   project has so far deliberately avoided re-hosting, so have it reviewed
   before the first disc leaves the building. The EULA PDF URL in
   `licenses.json` is unversioned; refresh its pin when NVIDIA republishes.
-- **Python wheels**: 84 permissive plus the GPL one; license texts are
+- **Python wheels**: 79 permissive plus the GPL one; license texts are
   extracted from the wheels themselves.
 - **uv, CPython, llama.cpp**: permissive; texts extracted from the archives.
 
