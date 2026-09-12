@@ -3,7 +3,7 @@
 The files in this folder — the photographs `moonlit-forest.jpg` and
 `roller-coaster.jpg`, the sketch `spark.png`, the songs
 `where-the-old-gods-stood.mp3`, `the-skeleton-of-the-sky.mp3` and
-`the-last-spark.mp3`, their `.codes.bin` compositions, and the captions and
+`the-last-ember.mp3`, their `.codes.bin` compositions, and the captions and
 lyrics in `examples.json` — are:
 
 **© 2026 Logiscape LLC**, licensed under the

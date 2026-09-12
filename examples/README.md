@@ -11,7 +11,7 @@ them.
 |---|---|---|---|
 | Where the Old Gods Stood | `moonlit-forest.jpg` — a photo of bare trees around the moon | 3:12 | symphonic metal, male vocal |
 | The Skeleton of the Sky | `roller-coaster.jpg` — a photo of a coaster over still water | 3:40 | dark folk, female vocal |
-| The Last Spark | `spark.png` — a sketch drawn in Stillsong: one white speck on black | 2:40 | ambient piano, male vocal |
+| The Last Ember | `spark.png` — a sketch drawn in Stillsong: one white speck on black | 3:51 | medieval ballad, male vocal |
 
 Every song ships with its MP3 (V0, 40 sampler steps, so "Enhance quality" has
 somewhere to go), its SSC1 composition (`*.codes.bin`, so "Let it finish" and

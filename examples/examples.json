@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "songs": [
     {
       "id": "f4ceeae0ee7d4766b08e47691fd83627",
@@ -72,16 +72,16 @@
       "codes": "the-skeleton-of-the-sky.codes.bin"
     },
     {
-      "id": "83309f0dec654b6c9ef5f4d3d86109e3",
+      "id": "f6e4e96e3a404c05a1935235d503ef8a",
       "spec": {
-        "title": "The Last Spark",
+        "title": "The Last Ember",
         "idea": "",
-        "caption": "Global Metadata: Minimalist Neo-Classical, Ambient Piano. Tempo is very slow, around 60 bpm. Key is C minor. The emotional arc moves from a state of hollow, freezing isolation to a fragile, flickering warmth before receding into a profound, final silence. Listening scenario: A cold, empty room at 3 AM. Production profile features a wide, lush hall reverb, a felt piano texture with audible hammers and mechanical noises for intimacy, and a very high dynamic range to emphasize the quietest notes. The overall sound is extremely dry in the foreground but wet in the tail, creating a sense of a tiny sound in a massive space.\n\nVocal Details: Male lead, deep and weary baritone. The delivery is intimate and extremely breathy, almost a whisper, as if trying not to break the silence. It stays in a low register throughout, emphasizing the weight of the loneliness. There are no backing vocals, ensuring the focus remains entirely on the singular human voice. Minimal reverb is used on the vocal to keep it feeling close to the listener's ear, contrasted against the large reverb of the piano.\n\nArrangement: Intro: A felt piano plays a slow, sparse melody with long, decaying notes; the sound of the keys being pressed and the mechanical movement of the piano is audible to enhance the sense of solitude. Verse: The piano continues the pattern while the vocal enters, very dry and close, sitting right at the front of the mix. Chorus: The piano chords become slightly fuller and more resonant, providing a small lift in volume and emotional weight, but the arrangement remains strictly minimalist to mirror the one against the all theme. Verse: The piano returns to the original sparse pattern, dropping the weight. Bridge: The piano notes become slightly more frequent and urgent, creating a sense of straining to hold onto a memory before a final, lingering chord. Chorus: A repeat of the previous chorus, slightly louder with more sustain on the piano's final notes. Outro: The piano melody slows down significantly, the notes becoming further apart until only a single, final low note rings out, slowly fading into the heavy reverb until it is gone. The transition from the bridge to the final chorus should feel like a desperate, final effort of the voice, while the outro feels like the light finally going out.",
-        "lyrics": "[intro]\n\n[verse]\nA speck of light\nIn the hollow night\nA name I hold\nAgainst the cold\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[verse]\nI try to see\nWhat used to be\nA face a word\nA truth unheard\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[bridge]\nHold it close\nBefore it goes\nDon't let it fade\nIn the shadow's shade\n\n[chorus]\nOne tiny spark\nBefore the dark\nA ghost of you\nIn the deep blue\n\n[outro]\nOne last light...\nStay...",
+        "caption": "Global Metadata: Tragic Medieval Ballad with Minimalist Ambient influences. Tempo is a very slow, deliberate 55 bpm. Key is C minor. The emotional arc begins with a hollow, ghostly whisper of memory, builds into a poignant, aching peak of desperate longing, and finally recedes into a cold, silent void. Listening scenario: A ruined stone cathedral at the end of time, where only one light remains. The production profile features an extremely wide but sparse soundstage, heavy use of natural hall reverb, deep low-frequency drones, and crystalline high-end piano notes to represent the singular speck of light.\n\nVocal Details: Male lead, a fragile, breathy baritone with a weary, aged texture. The delivery is primarily a hushed, intimate whisper, as if speaking to a ghost, becoming slightly more emotive and strained during the chorus without ever losing its fragile quality. Backing vocals consist of distant, ghostly humming and ethereal, reverb-heavy oohs that sound like echoes of the past. Subtle doubling is used on the chorus to create a haunting, shimmering effect.\n\nArrangement: Intro: A low, steady drone synth and a single, reverb-drenched piano note every four beats establish a sense of infinite space. Verse: A sparsely finger-picked lute enters, providing a rhythmic pulse, while the piano remains the primary melodic voice. Pre-Chorus: A low, mournful cello enters, providing a grounded, weeping foundation. Chorus: A swell of low-register strings and a soft, sustained organ-like pad expand the soundstage; the mood becomes one of tragic, expansive yearning. Verse: Instrumentation thins back to the lute and piano, creating a sense of sudden isolation. Bridge: The music strips down to just the drone and a sharp, staccato piano melody that feels like a breaking heart. Solo: A weeping, high-register violin plays a soaring, tragic melody over the drone. Chorus: The strings and organ pad return for a final, climactic peak of emotional weight. Outro: All instruments fade out gradually, leaving only the low drone and one final, decaying piano note.",
+        "lyrics": "[intro]\n\n[verse]\nIn the hollow of the night\nOne small spark remains of light\nA face I used to know\nDeep within the winter snow\nYour name is all I keep\nBefore I fall to sleep\n\n[pre-chorus]\nThe walls are closing in\nWhere does the end begin?\n\n[chorus]\nOne spark in the endless black\nThe only path I lead back\nA flicker in the freezing gray\nBefore the memory fades away\n\n[verse]\nThe room is cold and wide,\nWith nowhere left to hide\nI reach for hands of old\nIn shadows deep and cold\nA single thought, a tiny flame\nWhispering your secret name\n\n[bridge]\nIs it real?\nOr just a dream?\nA ghost of what has been\n\n[solo]\n\n[chorus]\nOne spark in the endless black\nThe only path I lead back\nA flicker in the freezing gray\nBefore the memory fades away\n\n[outro]\nStill I see you...\nA fading light...",
         "instrumental": false,
         "targetSec": 120,
         "durationSec": 300,
-        "seed": "321100265480443",
+        "seed": "2224802899613662",
         "ditFile": "minimax_music3_dit_fp16.safetensors",
         "tiledDecode": true,
         "steps": 40,
@@ -90,10 +90,10 @@
         "topK": 50,
         "quality": "V0",
         "vocalPref": "male",
-        "genreHint": "sad. empty. alone.",
+        "genreHint": "a tragic medieval ballad whispered from a silent void",
         "language": "English"
       },
-      "actualSec": 159.64,
+      "actualSec": 231.08,
       "hitCeiling": false,
       "photo": {
         "file": "spark.png",
@@ -103,8 +103,8 @@
           "source": "drawing"
         }
       },
-      "audio": "the-last-spark.mp3",
-      "codes": "the-last-spark.codes.bin"
+      "audio": "the-last-ember.mp3",
+      "codes": "the-last-ember.codes.bin"
     }
   ]
 }
