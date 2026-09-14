@@ -2,7 +2,7 @@
 // [intro]…[outro], [solo] at the peaks, [instrumental] everywhere else.
 
 import { describe, expect, it } from 'vitest';
-import { NO_GENRE_HINT, composeUserMessage, instrumentalSkeleton } from '@engine/cowriter/cowriter';
+import { NO_GENRE_HINT, composeUserMessage, instrumentalSkeleton, normalize } from '@engine/cowriter/cowriter';
 import { INSTRUMENTAL_EXAMPLES, VOCAL_EXAMPLES, analysisPrompt, captionGuide, fewShot } from '@engine/cowriter/guides';
 import { estimateSeconds } from '@engine/cowriter/lyrics';
 import { lintLyrics } from '@engine/cowriter/linter';
@@ -42,6 +42,20 @@ describe('compose controls', () => {
     const hinted = composeUserMessage({ ...base, genreHint: 'dark folk' });
     expect(hinted).toContain('Genre / mood hint: dark folk.');
     expect(hinted).not.toContain(NO_GENRE_HINT);
+  });
+});
+
+describe('normalize', () => {
+  it('strips stage directions from the lyrics but leaves the caption prose alone', () => {
+    const out = normalize({
+      title: '"Harbour"',
+      caption: 'Global Metadata: sea shanty.\nVocal Details: male lead (gravelly).\nArrangement: Intro: a woodwind (reminiscent of an oboe).',
+      lyrics: '- [verse]\n(foghorn sound)\nSailing home (whispers) alone (ooh)\n\n\n\n[outro]',
+    });
+    expect(out.title).toBe('Harbour');
+    expect(out.caption).toContain('(gravelly)');
+    expect(out.caption).toContain('(reminiscent of an oboe)');
+    expect(out.lyrics).toBe('[verse]\nSailing home alone (ooh)\n\n[outro]');
   });
 });
 

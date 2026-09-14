@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrangementSections, estimateSeconds, isTagsOnly, parseLyrics, tagFamily } from '@engine/cowriter/lyrics';
+import { arrangementSections, estimateSeconds, isTagsOnly, parseLyrics, stripStageDirections, tagFamily } from '@engine/cowriter/lyrics';
 import { lintCaption, lintLyrics, stripMarkdown } from '@engine/cowriter/linter';
 import { genreTag } from '@engine/domain/types';
 
@@ -35,6 +35,46 @@ describe('lyrics helpers', () => {
 
   it('derives a genre tag from Global Metadata', () => {
     expect(genreTag(GOOD_CAPTION)).toBe('Indie folk with a light Americana lean');
+  });
+});
+
+describe('stripStageDirections', () => {
+  it('removes directions, dropping a line that held nothing else', () => {
+    const lyrics = '[verse]\n(foghorn sound)\nSailing home (whispers) alone\nThe harbour lights (softly, almost spoken)\n\n[chorus]\nHold on';
+    expect(stripStageDirections(lyrics)).toBe('[verse]\nSailing home alone\nThe harbour lights\n\n[chorus]\nHold on');
+  });
+
+  it('keeps vocable ad-libs, whatever the case or punctuation', () => {
+    expect(stripStageDirections('Lead me home (ooh)')).toBe('Lead me home (ooh)');
+    expect(stripStageDirections('Lead me home (Ooh, ooh...)')).toBe('Lead me home (Ooh, ooh...)');
+    expect(stripStageDirections('(Yeah!)\nLead me home')).toBe('(Yeah!)\nLead me home');
+    // A vocable mixed with a direction is still a direction.
+    expect(stripStageDirections('Lead me home (ooh, whispered)')).toBe('Lead me home');
+  });
+
+  it('keeps a backing-vocal echo of a line sung elsewhere', () => {
+    const lyrics = '[chorus]\nLight of the moon, lead me through\n(lead me through)\nInto the night (into the dark)';
+    expect(stripStageDirections(lyrics)).toBe('[chorus]\nLight of the moon, lead me through\n(lead me through)\nInto the night');
+  });
+
+  it('handles non-Latin lyrics: echoes survive, directions in fullwidth parentheses go', () => {
+    const ja = '[chorus]\n君の声\n(君の声)\n夜の海へ（ささやき）\n（フォグホーンの音）\n[outro]';
+    expect(stripStageDirections(ja)).toBe('[chorus]\n君の声\n(君の声)\n夜の海へ\n[outro]');
+    const ko = '[verse]\n그대의 목소리가 들려\n(그대의 목소리가 들려)\n(속삭이듯)';
+    expect(stripStageDirections(ko)).toBe('[verse]\n그대의 목소리가 들려\n(그대의 목소리가 들려)');
+    expect(stripStageDirections('[verse]\n月光照我心\n(照我心)\n(低语)')).toBe('[verse]\n月光照我心\n(照我心)');
+  });
+
+  it('does not mistake a direction for an echo because its word is sung mid-line', () => {
+    const lyrics = '[verse]\nThe whispers of the sea\n(whispers)\nCall me softly home\n(softly)\n(the sea)';
+    expect(stripStageDirections(lyrics)).toBe('[verse]\nThe whispers of the sea\nCall me softly home\n(the sea)');
+  });
+
+  it('tidies punctuation left behind and leaves everything else alone', () => {
+    expect(stripStageDirections('Sailing home (foghorn), alone')).toBe('Sailing home, alone');
+    expect(stripStageDirections('A smile (half a smile')).toBe('A smile (half a smile');
+    expect(stripStageDirections('[intro]\n\n[verse]\nNo directions here\n\n[outro]')).toBe('[intro]\n\n[verse]\nNo directions here\n\n[outro]');
+    expect(stripStageDirections('')).toBe('');
   });
 });
 

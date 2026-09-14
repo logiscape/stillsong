@@ -10,6 +10,7 @@ import type { PhotoAsset, VocalPref } from '../domain/types';
 import { LlmClient, type ChatMessage } from './llmClient';
 import { COMPOSE_SCHEMA, WRITER_PERSONA, analysisPrompt, captionGuide, fewShot } from './guides';
 import { lintCaption, lintLyrics, stripMarkdown, type LintIssue } from './linter';
+import { stripStageDirections } from './lyrics';
 import { renderCap } from '../domain/duration';
 import type { PhotoRepo } from '../repo/photos';
 
@@ -231,17 +232,20 @@ function parseJson(raw: string): Partial<ComposeJson> {
   }
 }
 
-function normalize(j: Partial<ComposeJson>): ComposeJson {
+/** Tidy the writer's raw JSON: Markdown out of the caption, bullets and stage directions out of the lyrics. */
+export function normalize(j: Partial<ComposeJson>): ComposeJson {
   const caption = stripMarkdown(String(j.caption ?? ''))
     // Ensure each heading starts its own paragraph.
     .replace(/\s*(Vocal Details\s*:)/i, '\n\n$1')
     .replace(/\s*(Arrangement\s*:)/i, '\n\n$1')
     .trim();
-  const lyrics = String(j.lyrics ?? '')
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((l) => l.replace(/^\s*[-*]\s+/, '').trimEnd())
-    .join('\n')
+  const lyrics = stripStageDirections(
+    String(j.lyrics ?? '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((l) => l.replace(/^\s*[-*]\s+/, '').trimEnd())
+      .join('\n'),
+  )
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return {
