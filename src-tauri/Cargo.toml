@@ -1,6 +1,6 @@
 [package]
 name = "stillsong"
-version = "0.1.0"
+version = "1.0.0"
 description = "Stillsong — turn a photo into a song that tells its story"
 edition = "2021"
 license = "GPL-3.0-only"

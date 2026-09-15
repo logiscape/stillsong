@@ -123,7 +123,7 @@ export function AboutScreen(): React.ReactElement {
           <Panel variant="quiet" pad={20}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
               <span style={{ font: '300 30px/1 var(--font-display)', color: 'var(--ink-1)' }}>Stillsong</span>
-              <Badge mono>0.1.0</Badge>
+              <Badge mono>1.0.0</Badge>
             </div>
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 'var(--space-5) 0 0', maxWidth: '54ch' }}>
               Stillsong never connects to the internet after setup. Your photos and songs stay on this computer.

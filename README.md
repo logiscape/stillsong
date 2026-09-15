@@ -16,12 +16,9 @@ your own PC. Stillsong installs like any other Windows program, fetches what
 it needs during setup, and then never connects to the internet again. Your pictures
 and songs stay with you.
 
-<!-- Screenshot or short clip of the Sanctuary goes here once a release build is captured. -->
-
-> **Status: pre-release.** The complete loop works end to end on the
-> installed app: first-run setup on a clean machine, photo in, song out,
-> sanctuary, remix, export. What remains before the first public release is
-> listed under [Roadmap](#roadmap).
+<p align="center">
+  <img src="docs/screenshots/create-song.png" alt="Stillsong's song creation screen, where you can either upload a photo or draw something in the sketchpad to create a song" width="800">
+</p>
 
 ## Why Stillsong
 
@@ -99,11 +96,6 @@ fakes and no GPU.
   another drive
 
 ## Installing
-
-> **Compiled installer coming soon.** The project is in pre-release. Once the
-> first release is tagged, you will be able to install it using the instructions
-> in this section. In the meantime, you can compile from source following the
-> steps in the Development section below.
 
 Download the latest installer from the
 [Releases page](https://github.com/logiscape/stillsong/releases) and run it.
@@ -237,10 +229,12 @@ makes the matching source available for every binary.
 
 ## Roadmap
 
-Remaining before the first public release:
+The project does not currently have a formal roadmap, but some ideas we would
+like to add in future versions:
 
-- A signed installer
-- A final design-review and keyboard-accessibility pass over the interface
+- Improve instrumental track creation, aiming for longer and more varied songs
+- Explore expanded hardware support, particularly for AMD/Intel GPUs and Apple Silicon
+- Monitor upstream developments for improved models and performance/stability updates
 
 ## Contributing
 
@@ -273,6 +267,33 @@ NVIDIA card with 8 GB or more.
 **Why is the download so large?** It is two full AI models (about 14 GB of
 weights) plus their runtimes, including PyTorch with CUDA. Everything is
 fetched from the upstream projects directly, never re-hosted here.
+
+## Tips for getting the best song results
+
+The style and quality of each song created by Stillsong can vary a lot based on
+the drawing or photo you provide, any genre hint, and the random seed that gets
+generated for each song. If you aren't happy with a song, use a remix to make a
+minor tweak or get a whole new take on the song.
+
+**Getting a whole new take on a song** If you want to give a song a completely
+different sound, you can create a remix and select the "New seed" option below
+the lyrics. You can also edit the caption field. Stillsong tends to work best
+with detailed and descriptive captions, but the caption provides a general
+direction and influence for the song. The model doesn't always follow the caption
+as precise instructions.
+
+**Refining or fixing part of a song** If you're happy with the general style and
+sound of a song but want to change a specific part, you can create a remix to
+edit the lyrics and choose "Keep original" to use the same seed. Stillsong will
+keep everything up to the segment that you changed, and recreate the song past
+that point. You can make a minor change, such as adding a comma or punctuation
+if you just want Stillsong to try a new take on that section.
+
+**Enhancing the sound quality of a song** By default, Stillsong uses a faster
+rendering method for new songs and remixes, so you can more quickly experiment
+with different variations of a song. These songs will show an "Enhance quality"
+button, which will keep the same melody and lyrics but enhance the quality to
+give instruments and vocals a crisper and clearer sound.
 
 ## License
 
