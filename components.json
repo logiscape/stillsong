@@ -8,7 +8,7 @@
     "download-r2.pytorch.org"
   ],
   "python": {
-    "version": "3.12.14",
+    "version": "3.12.15",
     "notes": "Exact interpreter (the python-dist item below) and the wheel set resolved once at release time from ComfyUI's pinned requirements.txt. `constraints` is hand-maintained: it holds the versions this stack was validated on wherever ComfyUI leaves a requirement open (torch is the one that matters for bit-identical codes). `exclude` is hand-maintained too: packages ComfyUI's requirements resolve but Stillsong deliberately does not ship — today the workflow-template media bundles (sample images/videos for the web frontend's template gallery, which a headless ComfyUI never serves; their absence only disables the /templates route with one logged error at boot). The lock script drops them after resolution and refuses a name the resolution does not contain. Regenerate everything below with `npm run lock:python` after every ComfyUI bump or constraint/exclude change (`--freeze` keeps every other pin where it is).",
     "constraints": [
       "torch==2.13.0+cu130"
@@ -831,9 +831,9 @@
     {
       "id": "uv",
       "kind": "tool",
-      "url": "https://github.com/astral-sh/uv/releases/download/0.12.6/uv-x86_64-pc-windows-msvc.zip",
-      "size": 17777417,
-      "sha256": "df7cb9f243eae1621400d4fcf5b1b3d90f20e264ece91b64deb3b0078abca6ef",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.13.1/uv-x86_64-pc-windows-msvc.zip",
+      "size": 15308685,
+      "sha256": "3b2661a463a5baea7f5076ea2b25ab71d77f36a6c0d809e5350651792f80a672",
       "installPath": "uv",
       "extract": "zip",
       "license": "MIT/Apache-2.0"
@@ -841,10 +841,10 @@
     {
       "id": "python-dist",
       "kind": "runtime",
-      "version": "3.12.14+20260901",
-      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-      "size": 21980728,
-      "sha256": "7c45c9622400d578709a9b2cddbe8124cc21d382409d9f13406d706d28e31b14",
+      "version": "3.12.15+20261013",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.12.15%2B20261013-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+      "size": 22019610,
+      "sha256": "7a2aef48e5ee569e310b29b32681debbc5d888e92790d85331a47736c6b06aad",
       "installPath": "python-dist",
       "extract": "tar.gz-strip1",
       "license": "PSF-2.0 (CPython); python-build-standalone build scripts MPL-2.0"
@@ -864,10 +864,10 @@
     {
       "id": "llama-cpp",
       "kind": "runtime",
-      "version": "b10643",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10643/llama-b10643-bin-win-cuda-13.3-x64.zip",
-      "size": 146460227,
-      "sha256": "5d4085c0eb1a64ca98f4fcf0ab43289ec8ddb0e080f8752f8a2d87c3b617e55f",
+      "version": "b11429 (v0.6.0)",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11429/llama-b11429-bin-win-cuda-13.4-x64.zip",
+      "size": 153089864,
+      "sha256": "76ddc6eff2389570789ed608881efc6977751a722015d8e8c94f302224ff1a3a",
       "installPath": "llama",
       "extract": "zip",
       "license": "MIT"
@@ -875,10 +875,10 @@
     {
       "id": "llama-cudart",
       "kind": "runtime",
-      "version": "b10643",
-      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10643/cudart-llama-bin-win-cuda-13.3-x64.zip",
-      "size": 390970417,
-      "sha256": "1462a050eb4c684921ba51dcc4cc488a036674c3e73e9945ee705b854808d03e",
+      "version": "b11429 (v0.6.0)",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11429/cudart-llama-bin-win-cuda-13.4-x64.zip",
+      "size": 423535356,
+      "sha256": "738f8c251ac22b70c3ae6f83a10cf222725df0395246a2cf58f32bdb85fbe668",
       "installPath": "llama",
       "extract": "zip",
       "license": "NVIDIA CUDA redistributable EULA (fetched from ggml-org's published release, never re-hosted)"

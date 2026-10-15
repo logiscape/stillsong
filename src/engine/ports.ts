@@ -79,6 +79,10 @@ export interface HardwareInfo {
   vendor: string;
   vramMb: number;
   ramMb: number;
+  /** NVIDIA driver version ("617.42") when nvidia-smi answered; absent/null otherwise. */
+  driverVersion?: string | null;
+  /** CUDA compute capability ("12.0") when nvidia-smi answered; absent/null otherwise. */
+  computeCap?: string | null;
 }
 
 /** One file under the supervised ComfyUI's output dir, in /history's `{filename, subfolder}` shape. */

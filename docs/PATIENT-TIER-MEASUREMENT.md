@@ -25,7 +25,7 @@ comfortable — never sweep up to a deliberate OOM.
   requirements.txt (verified installed). Upstream has an open post-Aug-3
   regression (Comfy-Org/ComfyUI#15255, mainly multi-GPU) in later versions —
   a reason to keep the pin.
-- Pinned llama.cpp b10643 defaults to `-ngl auto` with `--fit on` (shrinks
+- Pinned llama.cpp (b10643 when measured; b11429 / v0.6.0 now) defaults to `-ngl auto` with `--fit on` (shrinks
   *unset* args to fit VRAM, ~1 GiB margin). The supervisor's explicit
   `-ngl 99` opts out of fitting; `-c 16384` explicit is never shrunk by fit.
 

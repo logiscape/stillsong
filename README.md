@@ -88,6 +88,8 @@ fakes and no GPU.
     measured under emulation on a 16 GB card (see
     [docs/PATIENT-TIER-MEASUREMENT.md](docs/PATIENT-TIER-MEASUREMENT.md));
     if it behaves differently on your card, please open an issue
+- A current NVIDIA driver: 580 or newer, or 615 or newer on RTX 20 and GTX 16
+  cards (the first-run check tells you if yours needs an update)
 - 32 GB of system RAM recommended for the 8 to 16 GB tier. It is not required:
   Stillsong streams from disk when memory is tight, so leave Windows virtual
   memory enabled

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildGraph, NODE_PHASES } from '@engine/comfy/graphBuilder';
 import { defaultSpec, MODEL_FILES, RENDER_STEPS } from '@engine/domain/types';
 import { validateSpec } from '@engine/domain/validate';
-import { capCeiling, hardwareTier, renderCap } from '@engine/domain/duration';
+import { capCeiling, driverShortfall, hardwareTier, renderCap } from '@engine/domain/duration';
 
 describe('buildGraph', () => {
   const spec = { ...defaultSpec(), caption: 'Global Metadata: x\n\nVocal Details: y\n\nArrangement: z', lyrics: '[verse]\nhi', seed: '222', targetSec: 20, durationSec: 20 };
@@ -77,5 +77,22 @@ describe('hardware tiers', () => {
     expect(capCeiling(16_303)).toBe(300);
     expect(capCeiling(12_288)).toBe(300);
     expect(capCeiling(8_192)).toBe(300);
+  });
+
+  it('flags a driver older than the CUDA 13 runtimes need', () => {
+    const nv = (driverVersion: string | null, computeCap: string | null) => ({ vendor: 'nvidia', vramMb: 16_303, ramMb: 65_536, driverVersion, computeCap });
+    // Ampere and newer run the shipped machine code on any CUDA 13 driver (580+).
+    expect(driverShortfall(nv('617.42', '12.0'))).toBeNull();
+    expect(driverShortfall(nv('581.57', '8.9'))).toBeNull();
+    expect(driverShortfall(nv('580.88', '8.6'))).toBeNull();
+    expect(driverShortfall(nv('576.02', '8.9'))).toEqual({ have: '576.02', need: 580 });
+    // Turing gets PTX only, which the driver must JIT: it needs the CUDA 13.4 branch.
+    expect(driverShortfall(nv('581.57', '7.5'))).toEqual({ have: '581.57', need: 615 });
+    expect(driverShortfall(nv('617.42', '7.5'))).toBeNull();
+    // Unknown driver (DXGI fallback, or an nvidia-smi without the field) is never flagged.
+    expect(driverShortfall(nv(null, null))).toBeNull();
+    expect(driverShortfall({ vendor: 'nvidia', vramMb: 16_303, ramMb: 65_536 })).toBeNull();
+    expect(driverShortfall(nv('[N/A]', '8.9'))).toBeNull();
+    expect(driverShortfall({ vendor: 'amd', vramMb: 24_576, ramMb: 65_536, driverVersion: '24.1' })).toBeNull();
   });
 });

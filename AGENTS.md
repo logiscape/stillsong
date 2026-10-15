@@ -97,6 +97,8 @@ Post-setup disk hygiene: `_downloads/` (archives + wheelhouse) is deleted once `
 - Constrained JSON is `response_format: {type:"json_schema", schema}` (llama.cpp's flat shape, not OpenAI's nested one). String `maxLength` is grammar-enforced — keep bounds on every string field (an unbounded compose rambled for 191 s).
 - `/health` returns 503 while loading (~10–20 s). Awaiting process exit is the VRAM-clear guarantee.
 - Ollama's `/v1` is not a substitute in dev: it silently ignores context length (4K default) and guide-sized prompts overflow it.
+- Pinned build is b11429 = the `v0.6.0` semver tag (llama.cpp's versioned tags are plain commits on master; binaries exist only for the nightly `b` builds, so pin the `b` number). Windows CUDA 13 assets switched from `cuda-13.3` to `cuda-13.4` at b10977 (2026-09-15); 13.4 binaries run on any CUDA 13 driver (580+) via minor-version compatibility, except Turing (compute 7.x), which gets PTX only and needs the 13.4 driver branch (615+) — `driverShortfall` in `duration.ts` shows the setup notice. `--no-webui` is now a deprecated alias of `--no-ui` (still accepted).
+- Vision cost is small; the card is the cost. Measured 2026-10-15 (RTX 5080, Gemma 4 12B Q4_0): every photo encodes to 508 image tokens (server caps the model's 1120 budget to `n_ubatch` = 512; b10643 gave 280), prompt processing ≈ 0.25–0.5 s, and the ~1,000-token analysis card ≈ 10–12 s at ~89 tok/s. Raise `-ub` only if more image detail is ever wanted; it will not speed anything up.
 
 **Tauri v2**
 - Plugin commands need entries in `src-tauri/capabilities/default.json`; without them `Database.load` hangs at "Starting engine…". Restart `tauri dev` after editing capabilities.

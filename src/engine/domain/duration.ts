@@ -50,6 +50,38 @@ export function hardwareTier(hw: HardwareInfo): HardwareTier {
 }
 
 /**
+ * Minimum NVIDIA driver (major) for the bundled runtimes. Both PyTorch
+ * (cu130) and the llama.cpp build (CUDA 13.4) are CUDA 13 binaries, which
+ * NVIDIA's minor-version compatibility runs on any 13.x-capable driver, i.e.
+ * 580 or newer.
+ */
+export const DRIVER_FLOOR = 580;
+
+/**
+ * Turing (compute capability 7.x: RTX 20, GTX 16) is the exception. The
+ * llama.cpp release build ships machine code only for Ampere, Ada and
+ * Blackwell and PTX for Turing (ggml-cuda's default architecture set), and
+ * PTX is JIT-compiled by the driver, so it needs the driver branch that
+ * matches the CUDA 13.4 toolkit the build used: R615.
+ */
+export const DRIVER_FLOOR_TURING = 615;
+
+/**
+ * The driver version this card needs but lacks, or null when it is new
+ * enough or unknown (the DXGI fallback reports no version). Advisory: the
+ * setup check shows it and lets setup continue, since an older driver fails
+ * loudly at first use rather than silently.
+ */
+export function driverShortfall(hw: HardwareInfo): { have: string; need: number } | null {
+  if (hw.vendor !== 'nvidia' || !hw.driverVersion) return null;
+  const major = Number.parseInt(hw.driverVersion, 10);
+  if (!Number.isFinite(major)) return null;
+  const turing = /^7\./.test(hw.computeCap ?? '');
+  const need = turing ? DRIVER_FLOOR_TURING : DRIVER_FLOOR;
+  return major < need ? { have: hw.driverVersion, need } : null;
+}
+
+/**
  * Ceiling on the render cap: CAP.max for every supported tier. Measured
  * 2026-08-31 (docs/PATIENT-TIER-MEASUREMENT.md): with dynamic VRAM, every cap
  * to 300 s completes on an emulated 8 GB card (--reserve-vram 8 on the 5080) —

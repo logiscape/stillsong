@@ -4,7 +4,7 @@
     {
       "id": "uv-license-mit",
       "appliesTo": ["uv"],
-      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.6/LICENSE-MIT",
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.13.1/LICENSE-MIT",
       "size": 1077,
       "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
       "dest": "runtimes/uv/LICENSE-MIT.txt",
@@ -13,7 +13,7 @@
     {
       "id": "uv-license-apache",
       "appliesTo": ["uv"],
-      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.12.6/LICENSE-APACHE",
+      "url": "https://raw.githubusercontent.com/astral-sh/uv/0.13.1/LICENSE-APACHE",
       "size": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
       "dest": "runtimes/uv/LICENSE-APACHE.txt"
@@ -21,7 +21,7 @@
     {
       "id": "llama-cpp-license",
       "appliesTo": ["llama-cpp", "llama-cudart"],
-      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b10643/LICENSE",
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b11429/LICENSE",
       "size": 1078,
       "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
       "dest": "runtimes/llama-cpp/LICENSE.txt",

@@ -205,7 +205,7 @@ export function fakeRuntime(events: string[] = []): Runtime & {
       return { comfy: 'http://comfy.test', llm: 'http://llm.test' };
     },
     async hardware() {
-      return { vendor: 'nvidia', vramMb: 16_303, ramMb: 65_536 };
+      return { vendor: 'nvidia', vramMb: 16_303, ramMb: 65_536, driverVersion: '617.42', computeCap: '12.0' };
     },
     async comfyOutputs() {
       return [...r.outputs];

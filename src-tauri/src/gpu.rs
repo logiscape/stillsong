@@ -17,28 +17,86 @@ pub struct GpuInfo {
     pub vram_mb: u64,
     #[serde(rename = "ramMb")]
     pub ram_mb: u64,
+    /// NVIDIA driver version as nvidia-smi reports it ("617.42"). None when
+    /// detection fell back to DXGI, which has no driver data. The setup check
+    /// compares its major against the floor the bundled CUDA 13 runtimes need
+    /// (`driverShortfall` in src/engine/domain/duration.ts).
+    #[serde(rename = "driverVersion")]
+    pub driver_version: Option<String>,
+    /// CUDA compute capability ("12.0"). None without nvidia-smi or on an
+    /// nvidia-smi too old to answer `compute_cap`. Turing (7.x) matters: the
+    /// llama.cpp release build carries PTX, not machine code, for it.
+    #[serde(rename = "computeCap")]
+    pub compute_cap: Option<String>,
 }
 
-fn from_nvidia_smi() -> Option<(String, u64)> {
+/// One nvidia-smi row; the best (most VRAM) one wins on multi-GPU machines.
+#[derive(Debug, PartialEq)]
+struct NvidiaGpu {
+    name: String,
+    vram_mb: u64,
+    driver_version: Option<String>,
+    compute_cap: Option<String>,
+}
+
+fn run_nvidia_smi(query: &str) -> Option<String> {
     let out = std::process::Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=name,memory.total",
-            "--format=csv,noheader,nounits",
-        ])
+        .args([query, "--format=csv,noheader,nounits"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()?;
     if !out.status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    // Multiple GPUs: take the one with the most VRAM.
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn from_nvidia_smi() -> Option<NvidiaGpu> {
+    // `driver_version` and `compute_cap` are newer query fields; an old
+    // nvidia-smi rejects the whole query, so fall back to the two-field form
+    // rather than lose the NVIDIA path (and the hybrid-GPU immunity) entirely.
+    if let Some(text) = run_nvidia_smi("--query-gpu=name,memory.total,driver_version,compute_cap") {
+        if let Some(gpu) = parse_nvidia_smi(&text, true) {
+            return Some(gpu);
+        }
+    }
+    parse_nvidia_smi(&run_nvidia_smi("--query-gpu=name,memory.total")?, false)
+}
+
+/// Parses nvidia-smi CSV rows. The fixed fields follow the name, so they are
+/// taken from the right and a comma inside a product name cannot shift them.
+fn parse_nvidia_smi(text: &str, extended: bool) -> Option<NvidiaGpu> {
+    let tail = if extended { 3 } else { 1 };
     text.lines()
         .filter_map(|line| {
-            let (name, mem) = line.rsplit_once(',')?;
-            Some((name.trim().to_string(), mem.trim().parse::<u64>().ok()?))
+            let fields: Vec<&str> = line.split(',').map(str::trim).collect();
+            if fields.len() < tail + 1 {
+                return None;
+            }
+            let name = fields[..fields.len() - tail].join(",");
+            let rest = &fields[fields.len() - tail..];
+            let vram_mb = rest[0].parse::<u64>().ok()?;
+            // nvidia-smi prints "[N/A]" or "[Not Supported]" for fields it
+            // cannot answer; only a digit-led value is a version.
+            let numeric = |s: &str| {
+                s.chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit())
+                    .then(|| s.to_string())
+            };
+            let (driver_version, compute_cap) = if extended {
+                (numeric(rest[1]), numeric(rest[2]))
+            } else {
+                (None, None)
+            };
+            Some(NvidiaGpu {
+                name,
+                vram_mb,
+                driver_version,
+                compute_cap,
+            })
         })
-        .max_by_key(|(_, mb)| *mb)
+        .max_by_key(|g| g.vram_mb)
 }
 
 fn from_dxgi() -> Option<(String, String, u64)> {
@@ -110,12 +168,14 @@ pub fn detect() -> GpuInfo {
 
 fn detect_real() -> GpuInfo {
     let ram_mb = system_ram_mb();
-    if let Some((name, vram_mb)) = from_nvidia_smi() {
+    if let Some(gpu) = from_nvidia_smi() {
         return GpuInfo {
             vendor: "nvidia".into(),
-            name,
-            vram_mb,
+            name: gpu.name,
+            vram_mb: gpu.vram_mb,
             ram_mb,
+            driver_version: gpu.driver_version,
+            compute_cap: gpu.compute_cap,
         };
     }
     if let Some((vendor, name, vram_mb)) = from_dxgi() {
@@ -124,6 +184,8 @@ fn detect_real() -> GpuInfo {
             name,
             vram_mb,
             ram_mb,
+            driver_version: None,
+            compute_cap: None,
         };
     }
     GpuInfo {
@@ -131,10 +193,75 @@ fn detect_real() -> GpuInfo {
         name: "unknown".into(),
         vram_mb: 0,
         ram_mb,
+        driver_version: None,
+        compute_cap: None,
     }
 }
 
 #[tauri::command]
 pub fn gpu_info() -> GpuInfo {
     detect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gpu(name: &str, vram_mb: u64, driver: Option<&str>, cap: Option<&str>) -> NvidiaGpu {
+        NvidiaGpu {
+            name: name.into(),
+            vram_mb,
+            driver_version: driver.map(str::to_string),
+            compute_cap: cap.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn parses_extended_row() {
+        let row = "NVIDIA GeForce RTX 5080, 16303, 617.42, 12.0";
+        assert_eq!(
+            parse_nvidia_smi(row, true),
+            Some(gpu(
+                "NVIDIA GeForce RTX 5080",
+                16303,
+                Some("617.42"),
+                Some("12.0")
+            ))
+        );
+    }
+
+    #[test]
+    fn parses_basic_row_without_versions() {
+        assert_eq!(
+            parse_nvidia_smi("NVIDIA GeForce RTX 3070, 8192", false),
+            Some(gpu("NVIDIA GeForce RTX 3070", 8192, None, None))
+        );
+    }
+
+    #[test]
+    fn picks_the_largest_gpu_and_keeps_commas_in_names() {
+        let nl = char::from(10u8);
+        let text = format!(
+            "Intel, Iris Xe, 128, 590.10, 9.0{nl}NVIDIA GeForce RTX 4070, 12282, 590.10, 8.9{nl}"
+        );
+        assert_eq!(
+            parse_nvidia_smi(&text, true),
+            Some(gpu(
+                "NVIDIA GeForce RTX 4070",
+                12282,
+                Some("590.10"),
+                Some("8.9")
+            ))
+        );
+    }
+
+    #[test]
+    fn unsupported_fields_become_none() {
+        assert_eq!(
+            parse_nvidia_smi("NVIDIA GeForce GTX 1660, 6144, 581.57, [N/A]", true),
+            Some(gpu("NVIDIA GeForce GTX 1660", 6144, Some("581.57"), None))
+        );
+        assert_eq!(parse_nvidia_smi("garbage", true), None);
+        assert_eq!(parse_nvidia_smi("", false), None);
+    }
 }

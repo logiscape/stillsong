@@ -412,7 +412,7 @@ mod tests {
         let py = artifact(comp, "python-dist").unwrap();
         assert_eq!(
             py.dest.file_name().unwrap().to_string_lossy(),
-            "cpython-3.12.14+20260901-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
+            "cpython-3.12.15+20261013-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
         );
         let dit = artifact(comp, "music-dit").unwrap();
         assert_eq!(

@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { hardwareTier } from '@engine/domain/duration';
+import { driverShortfall, hardwareTier } from '@engine/domain/duration';
 import { getEngine, navigate, saveSettings, useAppState } from '@state/store';
 import { Button } from '@ui/ds/Button';
 import { Icon } from '@ui/ds/Icon';
@@ -112,6 +112,7 @@ export function SetupScreen(): React.ReactElement {
   const engine = getEngine();
   const hw = engine.hardware;
   const tier = hardwareTier(hw);
+  const driver = driverShortfall(hw);
 
   useEffect(() => {
     void invoke<{ componentsDir: string }>('runtime_paths').then((p) => {
@@ -241,6 +242,9 @@ export function SetupScreen(): React.ReactElement {
             value={`${vramGb} GB`}
             tone={tier === 'unsupported' ? 'bad' : tier === 'patient' ? 'warn' : 'good'}
           />
+          {hw.driverVersion && (
+            <Line icon={driver ? 'x' : 'check'} label="Graphics driver" value={hw.driverVersion} tone={driver ? 'warn' : 'good'} />
+          )}
           <Line icon="check" label="Memory" value={`${ramGb} GB`} tone={hw.ramMb < 32_000 ? 'warn' : 'good'} />
           <Line
             icon={freeBytes !== null && freeBytes < REQUIRED_FREE_BYTES ? 'x' : 'check'}
@@ -253,6 +257,11 @@ export function SetupScreen(): React.ReactElement {
           <Notice tone="warn" style={{ marginTop: 'var(--space-6)' }} title="This will take a little longer">
             Your graphics card has {vramGb} GB of memory — songs will sound exactly as good and run just as long, but they'll take several times longer to create.
             {hw.ramMb < 32_000 && ' With less than 32 GB of memory things may slow down further — 32 GB is recommended, and Windows virtual memory (the default) should stay enabled.'}
+          </Notice>
+        )}
+        {driver && tier !== 'unsupported' && (
+          <Notice tone="warn" style={{ marginTop: 'var(--space-6)' }} title="Your graphics driver needs an update">
+            The studio needs NVIDIA driver {driver.need} or newer, and this computer has {driver.have}. You can finish setup now, but Stillsong can't write songs until the driver is updated — the NVIDIA app or nvidia.com has the latest one.
           </Notice>
         )}
         {tier === 'unsupported' && (
