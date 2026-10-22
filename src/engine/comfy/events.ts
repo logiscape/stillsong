@@ -1,7 +1,7 @@
 // Parses ComfyUI WebSocket messages into typed progress events with
 // human-readable phases and a rolling per-step ETA.
 //
-// Music 3 specifics (verified live on 0.33.3): the AR encoder emits
+// Music 3 specifics (verified live on 0.33.3 and 0.42.4): the AR encoder emits
 // `progress` events with max = max_duration × 25 (audio frames), and
 // `progress.data.node` identifies the emitting node, so a step event carries
 // the phase of the node it belongs to (encode = composing, sample = rendering).

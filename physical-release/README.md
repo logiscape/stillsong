@@ -35,7 +35,7 @@ X:\
     components.json                  the pinned component manifest this build was made from
   components\              laid out exactly like the app's components dir (see below)
     _downloads\<archives>            uv, CPython, ComfyUI source, llama.cpp, cudart
-    _downloads\wheelhouse\*.whl      the 80 pinned wheels
+    _downloads\wheelhouse\*.whl      the 79 pinned wheels
     models\*.gguf                    Gemma 4 (already at its install path)
     comfy-data\models\...            MiniMax Music 3 (already at its install path)
   licenses\                see collect-licenses.ps1
@@ -94,9 +94,9 @@ process untouched:
   and survives runs.
 - A Blu-ray recorder and blank **BD-R** media for burning. Use HTL (inorganic)
   or M-DISC discs, not LTH. Single-layer 25 GB discs are 25,025,314,816 bytes;
-  the current component set is 24,446,255,715 bytes (the five ComfyUI
-  template-gallery media wheels, 444 MB, are excluded via `python.exclude`),
-  which leaves about 579 MB for everything else, or about 512 MB after the
+  the current component set is 24,516,062,770 bytes (the six ComfyUI
+  template-gallery media wheels, 513 MB, are excluded via `python.exclude`),
+  which leaves about 509 MB for everything else, or about 442 MB after the
   64 MiB file-system reserve. Single layer fits today with the stock installer
   and licenses; a model bump of any size will push it to **BD-R DL (50 GB)**.
   The build refuses a medium the payload does not fit.
@@ -157,9 +157,13 @@ Prefer a moderate write speed over the drive's maximum for archival media.
    `STILLSONG_E2E_COMPONENTS=<copy of out\stage\components> cargo test first_run_headless`
    (in `src-tauri\`). It fetches nothing if the layout is right, then
    extracts, syncs Python offline, and imports torch with CUDA. Steps 1–4
-   were run this way when the tooling was written: the image mounted as
-   UDF, all 353 files verified in under a minute, and the headless first
-   run finished in 50 s with every "fetch" returning at once.
+   were run this way when the tooling was written (353 files, 50 s headless
+   run) and again for the ComfyUI v0.42.4 bump on 2026-10-22: a 24.79 GB
+   image (0.17 GB single-layer headroom) mounted as UDF, all 341 files
+   verified in 84 s, and the headless first run from a copy of the seeded
+   tree finished in 64 s with every seeded file left untouched (the only
+   new file was the venv's `requirements.lock`). The truly offline trial
+   (step 3, network unplugged) has still not been done.
 
 ## Licensing obligations the disc takes on
 
@@ -189,7 +193,7 @@ when the first disc ships. Per license:
   project has so far deliberately avoided re-hosting, so have it reviewed
   before the first disc leaves the building. The EULA PDF URL in
   `licenses.json` is unversioned; refresh its pin when NVIDIA republishes.
-- **Python wheels**: 79 permissive plus the GPL one; license texts are
+- **Python wheels**: 78 permissive plus the GPL one; license texts are
   extracted from the wheels themselves.
 - **uv, CPython, llama.cpp**: permissive; texts extracted from the archives.
 

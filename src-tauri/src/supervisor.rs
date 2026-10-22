@@ -274,7 +274,7 @@ impl Supervisor {
             port.to_string(),
             "--base-directory".into(),
             comfy_data.to_string_lossy().into_owned(),
-            "--disable-api-nodes".into(),
+            "--offline".into(),
         ];
         // Dev-only Patient-tier emulation (docs/PATIENT-TIER-MEASUREMENT.md):
         // hold N GB back from ComfyUI's memory budget. Never set in production.

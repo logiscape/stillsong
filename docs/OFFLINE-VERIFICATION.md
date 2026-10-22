@@ -65,7 +65,8 @@ every network touch the app can make and how to verify there are no others.
   separate, allowlisted downloader that is only reachable from the setup
   wizard.
 - Child processes run with `HF_HUB_OFFLINE=1` and `DO_NOT_TRACK=1`, and
-  ComfyUI is started with API nodes disabled.
+  ComfyUI is started with `--offline` (partner/API nodes disabled, and a
+  restrictive Content-Security-Policy on its own web UI).
 
 ## How to check with a packet capture
 

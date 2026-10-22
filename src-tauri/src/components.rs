@@ -821,7 +821,11 @@ mod tests {
 
         let mut probe =
             std::process::Command::new(comp.join("python-env").join("Scripts").join("python.exe"));
-        probe.args(["-I", "-c", "import torch, torchaudio; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"]);
+        probe.args([
+            "-I",
+            "-c",
+            "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())",
+        ]);
         let out = run_capture(probe).unwrap();
         eprintln!("torch: {out}");
         assert!(out.contains("+cu130"), "{out}");

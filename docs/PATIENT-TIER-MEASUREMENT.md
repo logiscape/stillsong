@@ -10,7 +10,7 @@ comfortable — never sweep up to a deliberate OOM.
 
 ## Context established 2026-08-31 (verify only if bumping pins)
 
-- Pinned ComfyUI v0.34.1 runs **dynamic VRAM + async offload by default** on
+- Pinned ComfyUI (v0.34.1 when measured; v0.42.4 now) runs **dynamic VRAM + async offload by default** on
   NVIDIA (no supervisor flags needed — the shipping config already uses it, so
   all fast-tier baselines include it). Weights are file-backed mappings
   streamed per-layer; the OS reclaims that RAM on demand and it is never paged
@@ -21,10 +21,12 @@ comfortable — never sweep up to a deliberate OOM.
   dynamic VRAM. `--fast-disk` (prefer disk-backed offload) exists for
   low-RAM/fast-NVMe machines. `--disable-dynamic-vram` = old estimate-based
   loading, the fallback if the streaming layer misbehaves.
-- The streaming backend is `comfy-aimdo`, pinned **==0.4.15** by the vendored
-  requirements.txt (verified installed). Upstream has an open post-Aug-3
-  regression (Comfy-Org/ComfyUI#15255, mainly multi-GPU) in later versions —
-  a reason to keep the pin.
+- The streaming backend is `comfy-aimdo`, pinned by the vendored
+  requirements.txt (**==0.4.15** when measured; **==0.5.6** with ComfyUI
+  v0.42.4, which added the per-frame malloc graphs and decode buffers the AR
+  encoder now uses — see `comfy-overlay/`). The post-Aug-3 multi-GPU
+  regression (Comfy-Org/ComfyUI#15255) that once argued for holding 0.4.15
+  does not affect the single-GPU path the app uses.
 - Pinned llama.cpp (b10643 when measured; b11429 / v0.6.0 now) defaults to `-ngl auto` with `--fit on` (shrinks
   *unset* args to fit VRAM, ~1 GiB margin). The supervisor's explicit
   `-ngl 99` opts out of fitting; `-c 16384` explicit is never shrunk by fit.

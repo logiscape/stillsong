@@ -72,7 +72,7 @@ describe.runIf(LIVE)('live: ComfyUI end-to-end', () => {
     const sampleSteps = seen.filter((p) => p.stepNode === 'sample');
     expect(encodeSteps.length).toBeGreaterThan(10);
     expect(encodeSteps[0].stepMax).toBe(500);
-    expect(sampleSteps.some((p) => p.stepMax === 30)).toBe(true);
+    expect(sampleSteps.some((p) => p.stepMax === defaultSpec().steps)).toBe(true);
     expect(seen.some((p) => p.phase === 'Composing (writing the song)')).toBe(true);
     expect(seen.some((p) => p.phase === 'Rendering audio')).toBe(true);
   });

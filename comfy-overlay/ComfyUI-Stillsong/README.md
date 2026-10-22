@@ -21,7 +21,7 @@ contract plus three capabilities the app needs:
 ## Provenance & license
 
 `stillsong_ar.py` is adapted from `comfy/ldm/minimax_music/ar.py` of
-[ComfyUI](https://github.com/comfyanonymous/ComfyUI) **0.34.1** (GPL-3.0) and is
+[ComfyUI](https://github.com/comfyanonymous/ComfyUI) **0.42.4** (GPL-3.0) and is
 itself GPL-3.0, as is all of Stillsong. Modified from the original; the
 modifications are the blocks marked `Stillsong:`.
 
@@ -29,7 +29,12 @@ The overlay is **pinned**: `__init__.py` hashes the installed ComfyUI's `ar.py`
 and refuses to load on a mismatch (`PINNED_AR_SHA256` in `stillsong_ar.py`).
 When bumping the pinned ComfyUI version: diff the new `ar.py` against the old,
 re-apply the marked blocks to a fresh copy, update the hash, and re-run the
-overlay smoke tests (`node scripts/overlay-smoke.mjs`).
+overlay smoke tests (`node scripts/overlay-smoke.mjs`). The check that the copy
+is faithful: take upstream `generate`, dedent it and rename `self` → `ar_self`,
+and `diff` it against `stillsong_generate`; the residual must be only the
+signature/docstring, the `Stillsong:` blocks, the `enable_graph` variable and
+the return tuple. Forced frames deliberately skip `malloc_graph_begin` (they run
+eagerly, outside the malloc graph, as upstream's frame 0 does).
 
 This is not a general-purpose custom node package; it is versioned with, and
 installed by, the Stillsong app (into `comfy-data/custom_nodes/`). Stillsong's

@@ -34,7 +34,7 @@ if ($listening) {
     throw "Port $Port is already in use (another ComfyUI?). Stop it or pass -Port."
 }
 
-$comfyArgs = @('--port', $Port, '--base-directory', $comfyData, '--disable-api-nodes')
+$comfyArgs = @('--port', $Port, '--base-directory', $comfyData, '--offline')
 if ($ReserveVram -gt 0) { $comfyArgs += @('--reserve-vram', $ReserveVram) }
 if ($ExtraArgs.Count -gt 0) { $comfyArgs += $ExtraArgs }
 

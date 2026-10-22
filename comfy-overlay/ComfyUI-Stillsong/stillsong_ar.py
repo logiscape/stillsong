@@ -1,5 +1,5 @@
 # Stillsong's adaptation of the MiniMax Music 3 AR generation loop
-# (comfy/ldm/minimax_music/ar.py, ComfyUI 0.34.1 — see PINNED_AR_SHA256).
+# (comfy/ldm/minimax_music/ar.py, ComfyUI 0.42.4 — see PINNED_AR_SHA256).
 # Derived from ComfyUI, GPL-3.0. Three additions, each marked "Stillsong:":
 #
 #   1. CAPTURE — every generated frame's feedback code row (c0 + 7 depth
@@ -41,7 +41,7 @@ from comfy.ldm.minimax_music.prompt import SPECIAL_TOKEN_IDS
 
 # sha256 of comfy/ldm/minimax_music/ar.py this file was adapted from.
 # __init__.py refuses to load the overlay against a different ar.py.
-PINNED_AR_SHA256 = "25927897f219685bc3a80341c97285065070842c5a161f2caa6ef123be9b6671"
+PINNED_AR_SHA256 = "fe0b74593ca0c742e28a57cced1887829a2f62b8322cbfdcd606e260016b0edc"
 
 
 def _depth_codes_forced(ar_self, hidden, c0, c0_embed, generator, execution_dtype, cfg_scale, top_k, force_row):
@@ -111,11 +111,19 @@ def stillsong_generate(
         capacity = min(max(int(kv_capacity_frames), decode_limit), MAX_AUDIO_FRAMES)
     past = ar_self.model.init_kv_cache(2, prompt_tokens + capacity + 1, device, execution_dtype)
     output = ar_self.model(None, embeds=text_embeds, past_key_values=past, dtype=execution_dtype)
-    last_hidden = output[0][:, -1]
+    last_hidden = output[0][:, -1].clone()
     past = output[2]
+    del output
+    vbar = getattr(ar_self, "dynamic_vbars", {}).get(device)
+    if vbar is not None:
+        comfy.model_management.reset_cast_buffers()
+        vbar.set_watermark(vbar.max_size)
 
     generator = torch.Generator(device=device).manual_seed(derive_seed(seed, "ar"))
     decoder = ar_self.model.audio_decoder
+    decode_buffers = None
+    if ar_self.model.graph_dynamic_vbar_blocks and comfy.model_prefetch.malloc_graph_enabled(device) and not comfy.model_management.args.disable_cuda_graphs:
+        decode_buffers = ar_self.model.init_decode_buffers(last_hidden.shape[0], device, execution_dtype)
     depth_io = {
         "hidden": torch.empty_like(last_hidden),
         "c0": torch.empty((last_hidden.shape[0],), dtype=torch.long, device=device),
@@ -123,8 +131,6 @@ def stillsong_generate(
         "codes": torch.empty((last_hidden.shape[0], ar_self.num_codebooks), dtype=torch.long, device=device),
         "depth_hidden": torch.empty((1, last_hidden.shape[-1] * (ar_self.num_codebooks - 1)), dtype=execution_dtype, device=device),
     }
-    decoder._comfy_cross_step_state = depth_io
-    comfy.model_management._register_cross_step(decoder)
 
     # Stillsong: forcing + capture state.
     forced = None
@@ -141,7 +147,8 @@ def stillsong_generate(
     pending_code = None
     stop_token = None
     pending_event = None
-    pending_hidden = None
+    pending_hidden = torch.empty(last_hidden.shape[-1] * ar_self.num_codebooks, dtype=execution_dtype, device=device)
+    pending_hidden_valid = False
     progress = comfy.utils.ProgressBar(decode_limit)
     cuda_device = torch.device(device).type == "cuda"
     vocab_mask = None
@@ -156,19 +163,26 @@ def stillsong_generate(
             if pending_event is not None:
                 pending_event.synchronize()
             if int(pending_code.item()) == stop_token:
-                pending_hidden = None
+                pending_hidden_valid = False
                 # Stillsong: the previous iteration fed back the stop frame's
                 # placeholder codes (upstream computes them too, then drops the
                 # frame) — do not keep that row in the captured composition.
                 captured_rows = max(captured_rows - 1, 0)
                 break
-            if pending_hidden is not None:
-                hidden_frames.append(pending_hidden)
+            if pending_hidden_valid:
+                hidden_frames.append(pending_hidden.clone())
                 progress.update_absolute(len(hidden_frames))
                 if len(hidden_frames) >= decode_limit:
                     break
 
         force_row = forced[frame_index] if frame_index < n_forced else None
+        # Stillsong: forced frames run outside the malloc graph, like upstream's
+        # frame 0 — their eager, data-dependent allocations would otherwise be
+        # recorded as graph breaks. Forced frames always precede free ones, so
+        # the graph is first recorded at the first free frame, as upstream
+        # records it at frame 1.
+        if frame_index and force_row is None:
+            comfy.model_prefetch.malloc_graph_begin(device)
         c0, code_or_stop, stop_token = ar_self._sample_c0(last_hidden, cfg_scale, top_k, generator, vocab_mask)
         if force_row is not None:
             # Stillsong: the sample above ran only to advance the RNG stream;
@@ -213,9 +227,12 @@ def stillsong_generate(
             [[decoder, ar_self.model.audio_extra_embedding]], device, {"prefetch_dynamic_vbars": True}
         )
         comfy.model_prefetch.prefetch_queue_pop(
-            depth_queue, device, decoder, execution_dtype, core=depth_core, enable_graph=enable_graph, generator=generator
+            depth_queue, device, decoder, execution_dtype, core=depth_core, enable_graph=enable_graph,
+            generator=generator, malloc_scope="depth"
         )
-        comfy.model_prefetch.prefetch_queue_pop(depth_queue, device, None)
+        comfy.model_prefetch.prefetch_queue_pop(
+            depth_queue, device, None, malloc_scope="depth"
+        )
         feedback_codes = depth_io["codes"]
         # Stillsong: record the frame exactly as it is fed back.
         captured[frame_index].copy_(feedback_codes[0])
@@ -223,18 +240,21 @@ def stillsong_generate(
         depth_hidden = depth_io["depth_hidden"]
         frame_hidden = torch.cat((last_hidden[:1].detach(), depth_hidden), dim=-1)
         if frame_index > 0:
-            pending_hidden = frame_hidden[0].clone()
+            pending_hidden.copy_(frame_hidden[0])
+            pending_hidden_valid = True
 
         feedback = ar_self._embed_audio_frame(feedback_codes, execution_dtype)
-        output = ar_self.model(None, embeds=feedback, past_key_values=past, dtype=execution_dtype)
-        last_hidden = output[0][:, -1]
+        output = ar_self.model(None, embeds=feedback, past_key_values=past, dtype=execution_dtype, decode_buffers=decode_buffers)
+        last_hidden.copy_(output[0][:, -1])
         past = output[2]
+        del output, feedback, frame_hidden, depth_hidden, feedback_codes, c0_embed, c0, code_or_stop
+        comfy.model_prefetch.malloc_graph_end()
 
-    if pending_hidden is not None and len(hidden_frames) < decode_limit:
+    if pending_hidden_valid and len(hidden_frames) < decode_limit:
         if pending_event is not None:
             pending_event.synchronize()
         if int(pending_code.item()) != stop_token:
-            hidden_frames.append(pending_hidden)
+            hidden_frames.append(pending_hidden.clone())
 
     if not hidden_frames:
         raise ValueError("MiniMax Music3 generated zero audio frames")

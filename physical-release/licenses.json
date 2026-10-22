@@ -49,8 +49,8 @@
       "id": "nvidia-cuda-eula",
       "appliesTo": ["llama-cudart", "torch"],
       "url": "https://docs.nvidia.com/cuda/pdf/EULA.pdf",
-      "size": 228421,
-      "sha256": "4f51a4318e8f7d86070e9c35f9797d233af23e4b6f9d42127704325b92dfc217",
+      "size": 228791,
+      "sha256": "52773e0c35dfc2721add2a1896c4f678838ac464a72621c47b5c48767d8862e8",
       "dest": "runtimes/NVIDIA-CUDA/EULA.pdf",
       "note": "Governs cudart and the other CUDA runtime DLLs inside the llama.cpp cudart zip and the PyTorch wheel. This URL is not versioned: NVIDIA republishes the PDF with each toolkit release, so expect to refresh size + sha256 when the build reports a mismatch."
     }

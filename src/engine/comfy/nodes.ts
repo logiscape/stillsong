@@ -125,7 +125,7 @@ export const vaeDecodeAudioTiled = (samples: Link, vae: Link): ApiNode => ({
 /**
  * SaveAudioAdvanced's `format` is a DynamicCombo; in API format the chosen
  * option's sub-input is addressed with the dotted key `format.quality`
- * (verified live against ComfyUI 0.33.3).
+ * (verified live against ComfyUI 0.33.3, again on 0.42.4).
  */
 export const saveAudioMp3 = (audio: Link, filenamePrefix: string, quality: 'V0' | '128k' | '320k'): ApiNode => ({
   class_type: 'SaveAudioAdvanced',
