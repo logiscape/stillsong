@@ -134,7 +134,10 @@ is assembled offline from the verified files.
 
 After that there is no updater, no telemetry and no remote host the interface
 is even permitted to contact: its only network bridge refuses anything that
-is not a loopback address. The full list of network touches, and a
+is not a loopback address. Installing a newer Stillsong yourself may ask,
+once, to update the studio it manages (the pinned list inside the new build
+differs from what is installed); nothing is checked or fetched until you say
+so, and the large model files stay put. The full list of network touches, and a
 step-by-step packet-capture check, are in
 [docs/OFFLINE-VERIFICATION.md](docs/OFFLINE-VERIFICATION.md).
 

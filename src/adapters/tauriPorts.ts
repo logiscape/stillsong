@@ -4,7 +4,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import type {
-  Clock, ComfyOutputRef, Db, FileStore, HardwareInfo, HttpTransport, Ports, Runtime, ServiceState, ThumbnailInfo, WsEventHandler, WsTransport,
+  Clock, ComfyOutputRef, Db, FileStore, HardwareInfo, HttpTransport, Ports, Runtime, RuntimeInstallState, ServiceState, ThumbnailInfo, WsEventHandler, WsTransport,
 } from '@engine/ports';
 import { newId } from '@engine/ports';
 
@@ -112,6 +112,10 @@ class RealClock implements Clock {
 class TauriRuntime implements Runtime {
   async status(): Promise<{ comfy: ServiceState; llm: ServiceState }> {
     return invoke('runtime_status');
+  }
+
+  async installState(): Promise<RuntimeInstallState> {
+    return invoke('runtime_install_state');
   }
 
   async startLlm(): Promise<void> {

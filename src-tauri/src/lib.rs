@@ -28,15 +28,18 @@ pub fn run() {
             let sup =
                 supervisor::Supervisor::new(app_data, overlay).map_err(std::io::Error::other)?;
             app.manage(sup);
-            // Boot the studio in the background once setup has completed
-            // (no-op with an external dev ComfyUI URL).
+            // Boot the studio in the background once setup has completed and
+            // the installed components match this build's manifest. An
+            // install from another manifest is never started: the update
+            // screen replaces it first (user-initiated; nothing is checked
+            // remotely). Always ready with an external dev ComfyUI URL.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let sup = handle.state::<supervisor::Supervisor>();
-                if sup.install_complete() {
+                if matches!(sup.install_state(), supervisor::InstallState::Ready { .. }) {
                     // Installs that finished before archive cleanup existed
-                    // still carry _downloads; the marker check inside keeps
-                    // this a no-op for anything but a completed install.
+                    // still carry _downloads; the state check inside keeps
+                    // this a no-op for anything but a current install.
                     let _ = sup.remove_downloads();
                     let _ = sup.ensure_comfy().await;
                 }
@@ -66,6 +69,8 @@ pub fn run() {
             supervisor::runtime_urls,
             supervisor::runtime_start_comfy,
             supervisor::runtime_mark_install_complete,
+            supervisor::runtime_install_state,
+            supervisor::components_prepare_update,
             supervisor::runtime_set_components_dir,
             supervisor::runtime_paths,
             supervisor::runtime_comfy_outputs,

@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:app:allow-exit",
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",

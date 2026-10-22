@@ -832,5 +832,59 @@ mod tests {
 
         // Idempotent: a second bootstrap is a no-op that still succeeds.
         bootstrap_python(&comp, &|_| {}).unwrap();
+
+        // Update leg: an install from another build (legacy "ok" marker)
+        // needs the update; preparing it replaces the runtime but keeps the
+        // current-manifest downloads, so the re-install fetches nothing.
+        use crate::supervisor::{install_state_in, prepare_update_in, write_marker, InstallState};
+        let current = m.manifest_version.as_str();
+        std::fs::write(comp.join(".install-complete"), b"ok").unwrap();
+        assert_eq!(
+            install_state_in(&comp, current),
+            InstallState::NeedsUpdate {
+                installed_version: None
+            }
+        );
+        prepare_update_in(&comp, &|l| eprintln!("  {l}")).unwrap();
+        assert!(!comp.join("python-env").exists());
+        assert!(!comp.join("ComfyUI").exists());
+        assert_eq!(
+            install_state_in(&comp, current),
+            InstallState::Updating { prepared: true }
+        );
+        for w in &m.python.wheels {
+            assert!(
+                manifest::wheelhouse_dir(&comp).join(&w.filename).exists(),
+                "{}",
+                w.filename
+            );
+        }
+        let t = std::time::Instant::now();
+        for id in &ids {
+            let art = manifest::artifact(&comp, id).unwrap();
+            crate::downloads::fetch(&art, &cancel, &|_, _| {}, &best)
+                .await
+                .unwrap_or_else(|e| panic!("{id}: {e}"));
+        }
+        eprintln!(
+            "re-fetch of {} artifacts took {:?} (all present)",
+            ids.len(),
+            t.elapsed()
+        );
+        for item in m.items.iter().filter(|i| i.extract.is_some()) {
+            extract_item(&comp, item).unwrap();
+        }
+        bootstrap_python(&comp, &|l| eprintln!("  {l}")).unwrap();
+        let mut probe =
+            std::process::Command::new(comp.join("python-env").join("Scripts").join("python.exe"));
+        probe.args(["-I", "-c", "import torch; print(torch.__version__)"]);
+        assert!(run_capture(probe).unwrap().contains("+cu130"));
+        write_marker(&comp, current).unwrap();
+        assert_eq!(
+            install_state_in(&comp, current),
+            InstallState::Ready {
+                version: current.to_string()
+            }
+        );
     }
 }

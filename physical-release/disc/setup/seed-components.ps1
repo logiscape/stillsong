@@ -55,10 +55,22 @@ if (-not [IO.Path]::IsPathRooted($Destination)) { throw "Please give a full path
 $Destination = [IO.Path]::GetFullPath($Destination)
 New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 
-$alreadySetUp = Test-Path (Join-Path $Destination '.install-complete')
-if ($alreadySetUp) {
-  Say '  Stillsong has already finished setting up in this folder, so there is nothing to copy.'
-  Say '  Only the installer will run (to install or update the app itself).'
+# The marker holds the manifest version the install was built from (older
+# builds wrote "ok"). Same version: nothing to copy. A different one: copy
+# the new pieces anyway — the app's update screen installs them from this
+# folder without downloading — and leave the marker for the app to replace.
+$markerPath = Join-Path $Destination '.install-complete'
+$alreadySetUp = $false
+if (Test-Path $markerPath) {
+  $installed = (Get-Content -Raw $markerPath).Trim([char]0xFEFF, ' ', "`r", "`n", "`t")
+  $alreadySetUp = ($installed -eq $manifest.manifestVersion)
+  if ($alreadySetUp) {
+    Say '  Stillsong has already finished setting up in this folder with these same pieces, so there is nothing to copy.'
+    Say '  Only the installer will run (to install or update the app itself).'
+  } else {
+    Say '  Stillsong is set up in this folder with an older studio. The new pieces will be copied, and'
+    Say '  Stillsong will ask to update itself from them the next time it opens (nothing is downloaded).'
+  }
 }
 
 # --- room ----------------------------------------------------------------------

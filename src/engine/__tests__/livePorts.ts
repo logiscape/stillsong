@@ -154,6 +154,8 @@ export function nodeRuntime(): Runtime & { dispose(): Promise<void> } {
 
   return {
     status: async () => ({ comfy: 'running', llm: child ? 'running' : 'stopped' }),
+    // The external ComfyUI is whatever the developer runs; never "stale".
+    installState: async () => ({ state: 'ready', version: 'live', currentVersion: 'live' }),
     startLlm,
     stopLlm,
     // Live tests run against an externally managed ComfyUI (:8000) whose

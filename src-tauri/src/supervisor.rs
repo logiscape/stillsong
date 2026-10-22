@@ -12,6 +12,8 @@ use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
@@ -29,6 +31,236 @@ pub enum ServiceState {
     Stopped,
     Running,
     Error,
+}
+
+/// What the components dir holds, relative to the manifest compiled into
+/// this binary. `.install-complete` carries the manifest version the install
+/// was built from (older builds wrote "ok"); `.update-pending` marks an
+/// update that has started replacing the runtime and not yet finished. The
+/// app never compares against anything remote — a new manifest only ever
+/// arrives inside a new build the user installed.
+#[derive(serde::Serialize, Clone, PartialEq, Debug)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum InstallState {
+    NotInstalled,
+    #[serde(rename_all = "camelCase")]
+    NeedsUpdate {
+        installed_version: Option<String>,
+    },
+    /// `prepared` once the old runtime has been fully cleared; before that a
+    /// resumed update must run the preparation again (a half-deleted
+    /// `python-env` would otherwise be reused by the bootstrap).
+    Updating {
+        prepared: bool,
+    },
+    Ready {
+        version: String,
+    },
+}
+
+const INSTALL_MARKER: &str = ".install-complete";
+const UPDATE_PENDING_MARKER: &str = ".update-pending";
+const PENDING_PREPARING: &str = "preparing";
+const PENDING_PREPARED: &str = "prepared";
+const UPDATE_NEEDED: &str = "The studio needs an update before it can start.";
+const UPDATE_IN_PROGRESS: &str = "The studio is being updated.";
+
+/// Pure classification of a components dir against the manifest version
+/// `current`. A legacy "ok" marker (or anything unreadable) is an install of
+/// unknown vintage and therefore needs the update; SQLite's copy of the
+/// version is deliberately not consulted — a build that forgot to bump the
+/// manifest version would have recorded "current" there and been wrong.
+pub fn install_state_in(dir: &Path, current: &str) -> InstallState {
+    if let Ok(pending) = std::fs::read_to_string(dir.join(UPDATE_PENDING_MARKER)) {
+        // Prepared only for *this* manifest: an update interrupted after its
+        // preparation and then overtaken by another build has already
+        // extracted that build's runtime, which must be cleared again.
+        let mut lines = pending.lines().map(str::trim);
+        let phase = lines.next();
+        let for_version = lines.next();
+        return InstallState::Updating {
+            prepared: phase == Some(PENDING_PREPARED) && for_version == Some(current),
+        };
+    }
+    let Ok(bytes) = std::fs::read(dir.join(INSTALL_MARKER)) else {
+        return InstallState::NotInstalled;
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let text = text.trim_start_matches('\u{feff}').trim();
+    if text == current {
+        return InstallState::Ready {
+            version: current.to_string(),
+        };
+    }
+    let looks_like_version =
+        !text.is_empty() && text != "ok" && text.chars().all(|c| c.is_ascii_graphic());
+    InstallState::NeedsUpdate {
+        installed_version: looks_like_version.then(|| text.to_string()),
+    }
+}
+
+/// Writes the versioned install marker and clears any pending-update marker.
+pub fn write_marker(dir: &Path, version: &str) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(INSTALL_MARKER), format!("{version}\n")).map_err(|e| e.to_string())?;
+    remove_file_ok(&dir.join(UPDATE_PENDING_MARKER))
+}
+
+fn remove_file_ok(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
+/// `remove_dir_all` that rides out the deferred handle closes and antivirus
+/// scans that make a just-stopped process's tree briefly undeletable on
+/// Windows. Missing is success.
+fn remove_dir_all_retry(path: &Path) -> Result<(), String> {
+    let mut last: Option<std::io::Error> = None;
+    for attempt in 0..8 {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                // 5 access denied, 32 sharing violation, 145 dir not empty
+                let transient = e.kind() == std::io::ErrorKind::PermissionDenied
+                    || matches!(e.raw_os_error(), Some(5 | 32 | 145));
+                last = Some(e);
+                if !transient {
+                    break;
+                }
+                if attempt < 7 {
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
+    }
+    let detail = last.map(|e| e.to_string()).unwrap_or_default();
+    Err(format!(
+        "A file in the studio folder is still in use. Close other programs and try again. ({}: {detail})",
+        path.display()
+    ))
+}
+
+/// Runtime directories an update replaces. Everything else under the
+/// components dir — the models, `comfy-data/` (user output, the overlay
+/// mirror) — is kept.
+const RUNTIME_DIRS: [&str; 7] = [
+    "python-env",
+    "uv-cache",
+    "ComfyUI",
+    "ComfyUI.unpacking",
+    "llama",
+    "python-dist",
+    "uv",
+];
+
+/// The filesystem half of an update, with the manifest tables injected:
+/// `keep` maps each current-manifest download destination to the sizes
+/// `fetch` would accept it at — exact for a byte-pinned file, up to the
+/// tree-bound slack for ComfyUI's archive, whose manifest size is nominal
+/// (anything else under `_downloads` is a leftover of another version and
+/// must not be mistaken for a complete download by `fetch`'s existing-file
+/// fast path — uv's zip name carries no version); `models` lists each model
+/// file with its pinned size, a mismatch meaning the pin moved.
+pub fn prepare_update_in_with(
+    dir: &Path,
+    version: &str,
+    keep: &std::collections::HashMap<PathBuf, std::ops::RangeInclusive<u64>>,
+    models: &[(PathBuf, u64)],
+    on_line: &dyn Fn(String),
+) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Pending ("preparing") first, then the install marker: a crash anywhere
+    // after this line boots into the update screen, never into a
+    // half-replaced studio, and a resume repeats the preparation until the
+    // marker says "prepared".
+    std::fs::write(
+        dir.join(UPDATE_PENDING_MARKER),
+        format!("{PENDING_PREPARING}\n{version}\n"),
+    )
+    .map_err(|e| e.to_string())?;
+    remove_file_ok(&dir.join(INSTALL_MARKER))?;
+    for name in RUNTIME_DIRS {
+        let path = dir.join(name);
+        if path.exists() {
+            on_line(format!("Removing {name}"));
+            remove_dir_all_retry(&path)?;
+        }
+    }
+    let downloads = crate::manifest::downloads_dir(dir);
+    if downloads.is_dir() {
+        let mut stack = vec![downloads];
+        while let Some(d) = stack.pop() {
+            let entries = std::fs::read_dir(&d).map_err(|e| e.to_string())?;
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                if !keep.get(&path).is_some_and(|ok| ok.contains(&size)) {
+                    on_line(format!(
+                        "Removing a leftover download: {}",
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                    remove_file_ok(&path)?;
+                }
+            }
+        }
+    }
+    for (path, size) in models {
+        if let Ok(md) = path.metadata() {
+            if md.len() != *size {
+                on_line(format!(
+                    "A large piece changed and will be fetched again: {}",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                ));
+                remove_file_ok(path)?;
+            }
+        }
+    }
+    std::fs::write(
+        dir.join(UPDATE_PENDING_MARKER),
+        format!("{PENDING_PREPARED}\n{version}\n"),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// `prepare_update_in_with` driven by the compiled-in manifest.
+pub fn prepare_update_in(dir: &Path, on_line: &dyn Fn(String)) -> Result<(), String> {
+    let m = crate::manifest::manifest();
+    let mut keep = std::collections::HashMap::new();
+    for item in &m.items {
+        if item.extract.is_some() {
+            let accepted = if item.tree_sha256.is_some() {
+                1..=item
+                    .size
+                    .saturating_mul(crate::manifest::TREE_BOUND_SIZE_SLACK)
+            } else {
+                item.size..=item.size
+            };
+            keep.insert(item.download_dest(dir), accepted);
+        }
+    }
+    for w in &m.python.wheels {
+        keep.insert(
+            crate::manifest::wheelhouse_dir(dir).join(&w.filename),
+            w.size..=w.size,
+        );
+    }
+    let models: Vec<(PathBuf, u64)> = m
+        .items
+        .iter()
+        .filter(|i| i.extract.is_none())
+        .map(|i| (i.install_dest(dir), i.size))
+        .collect();
+    prepare_update_in_with(dir, &m.manifest_version, &keep, &models, on_line)
 }
 
 struct Proc {
@@ -75,6 +307,10 @@ pub struct Supervisor {
     // into comfy-data/custom_nodes before each spawn. None = ship without it
     // (the engine probes the node and degrades to stock behavior).
     overlay_dir: Option<PathBuf>,
+    // Set while prepare_update is tearing the runtime down. A spawn that
+    // slips in between stop_all and the deletions (ensure_comfy registers
+    // its child only after spawning) would otherwise hold the files open.
+    updating: AtomicBool,
 }
 
 impl Supervisor {
@@ -105,7 +341,106 @@ impl Supervisor {
             external_comfy: std::env::var("STILLSONG_COMFY_URL").ok(),
             external_llm: std::env::var("STILLSONG_LLM_URL").ok(),
             overlay_dir,
+            updating: AtomicBool::new(false),
         })
+    }
+
+    /// Installed components versus this binary's manifest. An external dev
+    /// ComfyUI is always "ready": nothing here manages it.
+    pub fn install_state(&self) -> InstallState {
+        let current = crate::manifest::manifest().manifest_version.as_str();
+        if self.external_comfy.is_some() {
+            return InstallState::Ready {
+                version: current.to_string(),
+            };
+        }
+        install_state_in(&self.components_dir(), current)
+    }
+
+    /// The spawn gate: a studio this binary did not install is never started
+    /// (its ComfyUI may not know our flags, and the bundled overlay refuses
+    /// a base it was not derived from — silently, from the UI's point of view).
+    fn refuse_spawn_if_stale(&self) -> Result<(), String> {
+        if self.updating.load(Ordering::SeqCst) {
+            return Err(UPDATE_IN_PROGRESS.into());
+        }
+        if matches!(self.install_state(), InstallState::NeedsUpdate { .. }) {
+            return Err(UPDATE_NEEDED.into());
+        }
+        Ok(())
+    }
+
+    /// Stops both children and clears the runtime directories so the regular
+    /// setup install can rebuild them in place. Models, `comfy-data/` and the
+    /// library are untouched; current-manifest files already in `_downloads`
+    /// (a newer disc's seed, or a resumed update) are kept so the re-install
+    /// fetches only what is missing.
+    pub async fn prepare_update(
+        &self,
+        on_line: Arc<dyn Fn(String) + Send + Sync>,
+    ) -> Result<(), String> {
+        if self.external_comfy.is_some() {
+            return Err("The studio is managed outside the app in this session.".into());
+        }
+        self.updating.store(true, Ordering::SeqCst);
+        let result = self.prepare_update_inner(on_line).await;
+        self.updating.store(false, Ordering::SeqCst);
+        result
+    }
+
+    async fn prepare_update_inner(
+        &self,
+        on_line: Arc<dyn Fn(String) + Send + Sync>,
+    ) -> Result<(), String> {
+        on_line("Closing the studio".into());
+        self.stop_all().await;
+        self.inner.lock().await.comfy_restarted = false;
+        // kill() reaches the venv launcher only; the interpreter it runs is a
+        // grandchild that still maps the DLLs under python-env. Every member
+        // of the Job Object must be gone before anything is deleted.
+        self.terminate_job_members();
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let left = self
+                .job
+                .query_process_id_list()
+                .map(|p| p.len())
+                .unwrap_or(0);
+            if left == 0 {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                return Err(
+                    "The studio is still shutting down. Wait a moment and try again.".into(),
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        let dir = self.components_dir();
+        tokio::task::spawn_blocking(move || prepare_update_in(&dir, &|l| on_line(l)))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+
+    /// Force-terminates every process still in the Job Object (grandchildren
+    /// included). Best effort; the poll after it is what matters.
+    fn terminate_job_members(&self) {
+        let Ok(pids) = self.job.query_process_id_list() else {
+            return;
+        };
+        if pids.is_empty() {
+            return;
+        }
+        let mut cmd = Command::new("taskkill");
+        cmd.arg("/F");
+        for pid in pids {
+            cmd.args(["/PID", &pid.to_string()]);
+        }
+        let _ = cmd
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
     }
 
     pub fn components_dir(&self) -> PathBuf {
@@ -145,6 +480,7 @@ impl Supervisor {
         if self.external_llm.is_some() {
             return Ok(());
         }
+        self.refuse_spawn_if_stale()?;
         let mut inner = self.inner.lock().await;
         if let Some(p) = inner.llm.as_mut() {
             if p.child.try_wait().map_err(|e| e.to_string())?.is_none() {
@@ -213,6 +549,7 @@ impl Supervisor {
         if let Some(url) = &self.external_comfy {
             return Ok(url.clone());
         }
+        self.refuse_spawn_if_stale()?;
         {
             let mut inner = self.inner.lock().await;
             if let Some(p) = inner.comfy.as_mut() {
@@ -305,6 +642,16 @@ impl Supervisor {
             let mut inner = self.inner.lock().await;
             inner.comfy = Some(Proc { child, port });
         }
+        // An update that began while we were spawning will delete the files
+        // this child has just opened: back out before it holds anything.
+        if self.updating.load(Ordering::SeqCst) {
+            if let Some(mut p) = self.inner.lock().await.comfy.take() {
+                let _ = p.child.kill();
+                let _ = tokio::task::spawn_blocking(move || p.child.wait()).await;
+            }
+            self.terminate_job_members();
+            return Err(UPDATE_IN_PROGRESS.into());
+        }
         let url = format!("http://127.0.0.1:{port}");
         wait_for_health(&format!("{url}/system_stats"), Duration::from_secs(120)).await?;
         // Identity guard: the listener must be our direct child or any process
@@ -389,22 +736,25 @@ impl Supervisor {
         self.external_comfy.is_some() || self.components_dir().join(".install-complete").exists()
     }
 
+    /// Records the manifest version this install was built from (setup's and
+    /// the update's last step).
     pub fn mark_install_complete(&self) -> Result<(), String> {
         let dir = self.components_dir();
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         // The uninstaller finds the (possibly second-drive) components dir here.
         write_components_dir_registry(&dir);
-        std::fs::write(dir.join(".install-complete"), b"ok").map_err(|e| e.to_string())
+        write_marker(&dir, &crate::manifest::manifest().manifest_version)
     }
 
     /// Deletes the first-run archive staging dir (`_downloads`). The archives
     /// are read exactly once, by the extract step; after that nothing reaches
     /// them ("Verify installation" hashes the installed model files, never
-    /// the archives). Refuses to run before the install is marked complete
-    /// so a paused or abandoned setup keeps its resumable state. Idempotent.
+    /// the archives). Refuses to run unless the install is complete *and
+    /// current*, so a paused or abandoned setup keeps its resumable state and
+    /// a pending update keeps the files it will install from. Idempotent.
     pub fn remove_downloads(&self) -> Result<(), String> {
         let dir = self.components_dir();
-        if !dir.join(".install-complete").exists() {
+        if !matches!(self.install_state(), InstallState::Ready { .. }) {
             return Ok(());
         }
         match std::fs::remove_dir_all(dir.join("_downloads")) {
@@ -624,6 +974,37 @@ pub fn runtime_mark_install_complete(sup: tauri::State<'_, Supervisor>) -> Resul
     sup.mark_install_complete()
 }
 
+#[derive(serde::Serialize)]
+pub struct RuntimeInstallState {
+    #[serde(flatten)]
+    pub state: InstallState,
+    #[serde(rename = "currentVersion")]
+    pub current_version: String,
+}
+
+/// Installed components versus this build's manifest — what the store routes
+/// on at boot (setup, update screen, or the app).
+#[tauri::command]
+pub fn runtime_install_state(sup: tauri::State<'_, Supervisor>) -> RuntimeInstallState {
+    RuntimeInstallState {
+        state: sup.install_state(),
+        current_version: crate::manifest::manifest().manifest_version.clone(),
+    }
+}
+
+/// The update screen's "Update now": stops the studio and clears its runtime
+/// so the setup install can rebuild it in place. Streams one line per step.
+#[tauri::command]
+pub async fn components_prepare_update(
+    sup: tauri::State<'_, Supervisor>,
+    on_line: tauri::ipc::Channel<String>,
+) -> Result<(), String> {
+    sup.prepare_update(Arc::new(move |line: String| {
+        let _ = on_line.send(line);
+    }))
+    .await
+}
+
 /// First-run "Where to keep them": moves the components dir (persisted).
 #[tauri::command]
 pub fn runtime_set_components_dir(
@@ -722,7 +1103,183 @@ pub fn runtime_paths(sup: tauri::State<'_, Supervisor>) -> AppPaths {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::os::windows::io::AsRawHandle;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("stillsong-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn install_state_parses_markers() {
+        let dir = scratch("state");
+        let cur = "2026.10.22-1";
+        assert_eq!(install_state_in(&dir, cur), InstallState::NotInstalled);
+        for legacy in [&b"ok"[..], b"ok\r\n", b"", b"\xff\xfeo\0k\0"] {
+            std::fs::write(dir.join(INSTALL_MARKER), legacy).unwrap();
+            assert_eq!(
+                install_state_in(&dir, cur),
+                InstallState::NeedsUpdate {
+                    installed_version: None
+                },
+                "{legacy:?}"
+            );
+        }
+        std::fs::write(dir.join(INSTALL_MARKER), "2026.10.15-1\n").unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::NeedsUpdate {
+                installed_version: Some("2026.10.15-1".into())
+            }
+        );
+        write_marker(&dir, cur).unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::Ready {
+                version: cur.into()
+            }
+        );
+        // A BOM from a PowerShell `Set-Content -Encoding utf8` is tolerated.
+        std::fs::write(dir.join(INSTALL_MARKER), format!("\u{feff}{cur}\r\n")).unwrap();
+        assert!(matches!(
+            install_state_in(&dir, cur),
+            InstallState::Ready { .. }
+        ));
+        std::fs::write(
+            dir.join(UPDATE_PENDING_MARKER),
+            format!("preparing\n{cur}\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::Updating { prepared: false }
+        );
+        std::fs::write(
+            dir.join(UPDATE_PENDING_MARKER),
+            format!("prepared\n{cur}\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::Updating { prepared: true }
+        );
+        // Prepared for another build's manifest: that build may already have
+        // extracted its runtime here, so this build must prepare again.
+        std::fs::write(dir.join(UPDATE_PENDING_MARKER), "prepared\n2026.10.15-1\n").unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::Updating { prepared: false }
+        );
+        std::fs::write(dir.join(UPDATE_PENDING_MARKER), "prepared\n").unwrap();
+        assert_eq!(
+            install_state_in(&dir, cur),
+            InstallState::Updating { prepared: false }
+        );
+        write_marker(&dir, cur).unwrap();
+        assert!(!dir.join(UPDATE_PENDING_MARKER).exists());
+        assert!(matches!(
+            install_state_in(&dir, cur),
+            InstallState::Ready { .. }
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prepare_update_in_replaces_runtime_and_keeps_data() {
+        let dir = scratch("prepare");
+        let touch = |rel: &str, len: usize| {
+            let p = dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, vec![b'x'; len]).unwrap();
+            p
+        };
+        for d in RUNTIME_DIRS {
+            touch(&format!("{d}/some/file.bin"), 3);
+        }
+        let user = touch("comfy-data/user/settings.json", 2);
+        let overlay = touch("comfy-data/custom_nodes/ComfyUI-Stillsong/__init__.py", 2);
+        let good_model = touch("comfy-data/models/vae/x.safetensors", 10);
+        let bad_model = touch("models/gemma.gguf", 9);
+        let old_uv = touch("_downloads/uv-x86_64-pc-windows-msvc.zip", 5);
+        // ComfyUI's archive is tree-bound: its manifest size is nominal, so a
+        // recompressed copy within the slack (a disc's seed) must survive.
+        let cur_comfy = touch("_downloads/abc.tar.gz", 9);
+        let wheel = touch("_downloads/wheelhouse/torch.whl", 4);
+        let part = touch("_downloads/wheelhouse/numpy.whl.part", 1);
+        let lock = touch("_downloads/wheelhouse/requirements.lock", 1);
+        std::fs::write(dir.join(INSTALL_MARKER), "ok").unwrap();
+
+        let keep = std::collections::HashMap::from([
+            (old_uv.clone(), 6..=6u64), // the manifest's uv zip is a different size
+            (cur_comfy.clone(), 1..=14u64), // nominal 7, accepted up to 2x
+            (wheel.clone(), 4..=4u64),
+        ]);
+        let models = vec![(good_model.clone(), 10u64), (bad_model.clone(), 20u64)];
+        let lines = std::sync::Mutex::new(Vec::new());
+        let emit = |l: String| lines.lock().unwrap().push(l);
+        prepare_update_in_with(&dir, "v2", &keep, &models, &emit).unwrap();
+
+        for d in RUNTIME_DIRS {
+            assert!(!dir.join(d).exists(), "{d} should be gone");
+        }
+        assert!(user.exists() && overlay.exists(), "comfy-data is kept");
+        assert!(good_model.exists(), "a model of the pinned size is kept");
+        assert!(!bad_model.exists(), "a model of another size is refetched");
+        assert!(
+            !old_uv.exists(),
+            "an old archive with the current name is dropped"
+        );
+        assert!(
+            cur_comfy.exists() && wheel.exists(),
+            "current downloads survive"
+        );
+        assert!(
+            !part.exists() && !lock.exists(),
+            "partials and the lock are dropped"
+        );
+        assert!(!dir.join(INSTALL_MARKER).exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.join(UPDATE_PENDING_MARKER)).unwrap(),
+            "prepared\nv2\n"
+        );
+        assert_eq!(
+            install_state_in(&dir, "v2"),
+            InstallState::Updating { prepared: true }
+        );
+        assert!(lines
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|l| l.starts_with("Removing python-env")));
+
+        // Try again after a failure re-runs the same steps harmlessly.
+        prepare_update_in_with(&dir, "v2", &keep, &models, &|_| {}).unwrap();
+        assert!(cur_comfy.exists() && good_model.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_dir_all_retries_while_a_file_is_open() {
+        let dir = scratch("retry");
+        let path = dir.join("held");
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("open.bin");
+        std::fs::write(&file, b"x").unwrap();
+        // Without FILE_SHARE_DELETE the open handle makes the delete fail
+        // with a sharing violation until it is dropped.
+        let handle = std::fs::File::open(&file).unwrap();
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            drop(handle);
+        });
+        remove_dir_all_retry(&path).unwrap();
+        releaser.join().unwrap();
+        assert!(!path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The kernel backstop: closing the job handle must kill assigned
     /// processes even when nobody calls kill() (app crash, kill -9).

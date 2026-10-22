@@ -193,6 +193,41 @@ describe('Engine job pipeline', () => {
     void clock;
   });
 
+  it('parks the queue on a fresh install until setup finishes', async () => {
+    const { ports, world, runtime } = makePorts();
+    runtime.install = { state: 'not-installed', currentVersion: 'v' };
+    const engine = await Engine.create(ports);
+    await engine.enqueueSong(spec());
+    await flush();
+    expect(world.events).not.toContain('startComfy');
+
+    // Setup's last step: the studio exists now.
+    runtime.install = { state: 'ready', version: 'v', currentVersion: 'v' };
+    await engine.refreshInstallState();
+    await flush();
+    expect(world.events).toContain('submit');
+  });
+
+  it('parks the queue while the studio needs an update, and releases it after', async () => {
+    const { ports, world, runtime } = makePorts();
+    // A build whose manifest the installed studio does not match.
+    runtime.install = { state: 'needs-update', installedVersion: null, currentVersion: 'next' };
+    const engine = await Engine.create(ports);
+    expect(engine.installState.state).toBe('needs-update');
+    const song = await engine.enqueueSong(spec());
+    await flush();
+    expect(world.events).not.toContain('startComfy');
+    expect((await engine.jobs.queued()).map((j) => j.songId)).toEqual([song.id]);
+
+    // The update screen rebuilt the studio: the parked job goes through.
+    runtime.install = { state: 'ready', version: 'next', currentVersion: 'next' };
+    await engine.refreshInstallState();
+    await flush();
+    expect(engine.installState.state).toBe('ready');
+    expect(world.events).toContain('startComfy');
+    expect(world.events).toContain('submit');
+  });
+
   it('rejects invalid specs before persisting', async () => {
     const { ports } = makePorts();
     const engine = await Engine.create(ports);

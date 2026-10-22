@@ -467,8 +467,16 @@ pub async fn fetch(
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     if dest.exists() {
-        on_progress(art.size, None);
-        return Ok(());
+        // A byte-bound artifact is only "already here" at its pinned size:
+        // a same-named file of another size is a leftover from another
+        // manifest (uv's zip name carries no version) and must be replaced.
+        // A tree-bound archive's size is nominal; extract verifies its tree.
+        let len = dest.metadata().map(|m| m.len()).unwrap_or(0);
+        if art.sha256.is_none() || len == art.size {
+            on_progress(art.size, None);
+            return Ok(());
+        }
+        std::fs::remove_file(dest).map_err(|e| e.to_string())?;
     }
     let part = dest.with_extension(format!(
         "{}.part",

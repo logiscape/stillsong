@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { driverShortfall, hardwareTier } from '@engine/domain/duration';
-import { getEngine, navigate, saveSettings, useAppState } from '@state/store';
+import { finishSetup, getEngine, saveSettings, useAppState } from '@state/store';
 import { Button } from '@ui/ds/Button';
 import { Icon } from '@ui/ds/Icon';
 import { Notice } from '@ui/ds/Notice';
@@ -57,14 +57,14 @@ function pieceBytes(p: (typeof PIECES)[number]): number {
 
 const TOTAL_BYTES = ARTIFACTS.reduce((s, a) => s + a.size, 0);
 
-function Shell({ step, title, lede, children, footer }: {
-  step: number; title: string; lede?: string; children?: React.ReactNode; footer?: React.ReactNode;
+export function Shell({ step, steps = STEP_COUNT, title, lede, children, footer }: {
+  step: number; steps?: number; title: string; lede?: string; children?: React.ReactNode; footer?: React.ReactNode;
 }): React.ReactElement {
   return (
     <div style={{ display: 'grid', placeItems: 'center', height: '100%', overflowY: 'auto', padding: 'var(--gutter-screen)', background: 'radial-gradient(80% 60% at 50% 0%,rgba(58,47,40,.5),transparent 70%)' }}>
       <div style={{ width: 600 }}>
         <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-8)' }}>
-          {Array.from({ length: STEP_COUNT }, (_, i) => (
+          {Array.from({ length: steps }, (_, i) => (
             <div key={i} style={{ flex: 1, height: 2, borderRadius: 2, background: i <= step ? 'var(--brass)' : 'var(--wash-2)' }} />
           ))}
         </div>
@@ -89,9 +89,15 @@ function Line({ icon, label, value, tone }: { icon: string; label: string; value
 
 type Phase = 'idle' | 'downloading' | 'paused' | 'installing' | 'error' | 'done';
 
-export function SetupScreen(): React.ReactElement {
+/**
+ * `mode="update"` is the studio update's install half: the folder is fixed,
+ * the download/extract/install run starts on mount, the models already in
+ * place complete instantly, and the ready page hands back to the store.
+ */
+export function SetupScreen({ mode = 'first-run' }: { mode?: 'first-run' | 'update' } = {}): React.ReactElement {
   const s = useAppState();
-  const [step, setStep] = useState(0);
+  const updating = mode === 'update';
+  const [step, setStep] = useState(updating ? 4 : 0);
   const [componentsDir, setComponentsDir] = useState<string>('');
   const [freeBytes, setFreeBytes] = useState<number | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -118,7 +124,9 @@ export function SetupScreen(): React.ReactElement {
     void invoke<{ componentsDir: string }>('runtime_paths').then((p) => {
       setComponentsDir(p.componentsDir);
       void invoke<number | null>('components_free_space', { path: p.componentsDir }).then(setFreeBytes).catch(() => {});
+      if (updating) void runInstall();
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const chooseDir = async () => {
@@ -215,7 +223,7 @@ export function SetupScreen(): React.ReactElement {
     // supervisor also sweeps them at boot for installs that predate this).
     await invoke('components_remove_downloads').catch(() => {});
     if (s.settings) await saveSettings({ ...s.settings, installComplete: true, componentsDir, manifestVersion: manifest.manifestVersion });
-    navigate('create');
+    await finishSetup();
   };
 
   // ---- steps ----------------------------------------------------------------
@@ -312,8 +320,8 @@ export function SetupScreen(): React.ReactElement {
     const paused = phase === 'paused';
     const downloaded = ARTIFACTS.reduce((sum, a) => sum + Math.min(bytesById[a.id] ?? 0, a.size), 0);
     return (
-      <Shell step={4}
-        title={paused ? 'Paused.' : phase === 'error' ? 'The connection hiccuped.' : 'Setting things up.'}
+      <Shell step={updating ? 0 : 4} steps={updating ? 2 : STEP_COUNT}
+        title={paused ? 'Paused.' : phase === 'error' ? 'The connection hiccuped.' : updating ? 'Updating the studio.' : 'Setting things up.'}
         lede={paused
           ? 'Pick it up whenever you like — Stillsong remembers where it got to, even if you close it.'
           : 'You can leave this running. It picks up where it left off if the connection drops.'}
@@ -348,9 +356,12 @@ export function SetupScreen(): React.ReactElement {
   const ready = Boolean(warm?.writer && warm?.studio && warm?.instruments);
   if (ready) {
     return (
-      <Shell step={5} title="Ready to write your first song."
-        lede="Setup is finished and everything answers. From here on, Stillsong works completely offline."
-        footer={<Button variant="primary" size="lg" onClick={() => void finish()}>Start with a photo</Button>}>
+      <Shell step={updating ? 1 : 5} steps={updating ? 2 : STEP_COUNT}
+        title={updating ? 'The studio is up to date.' : 'Ready to write your first song.'}
+        lede={updating
+          ? 'Everything answers. Your songs are where you left them, and Stillsong keeps working completely offline.'
+          : 'Setup is finished and everything answers. From here on, Stillsong works completely offline.'}
+        footer={<Button variant="primary" size="lg" onClick={() => void finish()}>{updating ? 'Continue' : 'Start with a photo'}</Button>}>
         <Panel variant="quiet" pad={18}>
           <Line icon="check" label="The studio answers" value="ok" />
           <Line icon="check" label="Instruments found" value="ok" />
@@ -360,7 +371,8 @@ export function SetupScreen(): React.ReactElement {
     );
   }
   return (
-    <Shell step={5} title="Almost ready." lede="Warming up the studio and checking everything answers.">
+    <Shell step={updating ? 1 : 5} steps={updating ? 2 : STEP_COUNT} title="Almost ready." lede="Warming up the studio and checking everything answers."
+      footer={error ? <Button variant="primary" size="lg" onClick={() => { setError(null); void runWarmup(); }}>Try again</Button> : undefined}>
       <Panel pad={18}>
         <Line icon={warm?.studio ? 'check' : 'clock'} label="The studio answers" value={warm?.studio ? 'ok' : '…'} />
         <Line icon={warm?.instruments ? 'check' : 'clock'} label="Instruments found" value={warm?.instruments ? 'ok' : '…'} />

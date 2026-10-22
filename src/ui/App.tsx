@@ -11,6 +11,7 @@ import { SongScreen } from './screens/SongScreen';
 import { RemixScreen } from './screens/RemixScreen';
 import { AboutScreen } from './screens/AboutScreen';
 import { SetupScreen } from './screens/SetupScreen';
+import { UpdateScreen } from './screens/UpdateScreen';
 import { DrawScreen } from './screens/draw/DrawScreen';
 
 const NAV: { id: Screen; icon: string; label: string }[] = [
@@ -59,12 +60,13 @@ export function App(): React.ReactElement {
       </div>
     );
   }
-  const chrome = s.screen !== 'song' && s.screen !== 'setup' && s.screen !== 'draw';
+  const chrome = s.screen !== 'song' && s.screen !== 'setup' && s.screen !== 'update' && s.screen !== 'draw';
   return (
     <div style={{ position: 'relative', display: 'flex', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--ground)' }}>
       {chrome && <NavRail view={s.screen} />}
       <main style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'hidden' }}>
         {s.screen === 'setup' && <SetupScreen />}
+        {s.screen === 'update' && <UpdateScreen />}
         {s.screen === 'create' && <CreateScreen />}
         {s.screen === 'sanctuary' && <SanctuaryScreen />}
         {s.screen === 'song' && <SongScreen />}

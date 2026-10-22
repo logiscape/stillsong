@@ -3,7 +3,7 @@
 // supervisor, and a WS that never connects (exercising the history-poll
 // fallback).
 
-import type { Clock, ComfyOutputRef, FileStore, HttpTransport, Ports, Runtime, ThumbnailInfo, WsTransport } from '@engine/ports';
+import type { Clock, ComfyOutputRef, FileStore, HttpTransport, Ports, Runtime, RuntimeInstallState, ThumbnailInfo, WsTransport } from '@engine/ports';
 import { nodeDb } from './livePorts';
 
 export class FakeClock implements Clock {
@@ -184,13 +184,19 @@ export function fakeRuntime(events: string[] = []): Runtime & {
   /** What the fake ComfyUI's output dir currently holds (seed before Engine.create for sweep tests). */
   outputs: ComfyOutputRef[];
   removedOutputs: ComfyOutputRef[];
+  /** Set before Engine.create to boot into the update path. */
+  install: RuntimeInstallState;
 } {
   const r = {
     calls: events,
     outputs: [] as ComfyOutputRef[],
     removedOutputs: [] as ComfyOutputRef[],
+    install: { state: 'ready', version: 'test', currentVersion: 'test' } as RuntimeInstallState,
     async status() {
       return { comfy: 'running' as const, llm: 'stopped' as const };
+    },
+    async installState() {
+      return r.install;
     },
     async startLlm() {
       r.calls.push('startLlm');

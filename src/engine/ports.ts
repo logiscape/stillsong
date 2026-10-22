@@ -92,8 +92,24 @@ export interface ComfyOutputRef {
   subfolder: string;
 }
 
+/**
+ * Installed components versus the manifest compiled into this build (the
+ * supervisor's `.install-complete` marker carries the manifest version the
+ * install was built from). `needs-update` means the app must not start the
+ * studio until the user has run the update; `updating` is an update that
+ * started and has not finished (resume it). The app never checks remotely.
+ */
+export type InstallState =
+  | { state: 'not-installed' }
+  | { state: 'needs-update'; installedVersion: string | null }
+  | { state: 'updating'; prepared: boolean }
+  | { state: 'ready'; version: string };
+
+export type RuntimeInstallState = InstallState & { currentVersion: string };
+
 export interface Runtime {
   status(): Promise<{ comfy: ServiceState; llm: ServiceState }>;
+  installState(): Promise<RuntimeInstallState>;
   startLlm(): Promise<void>;
   stopLlm(): Promise<void>;
   /**

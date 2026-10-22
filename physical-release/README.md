@@ -58,14 +58,18 @@ X:\
 5. The user opens Stillsong. The wizard runs its normal steps; the folder is
    pre-selected; every "download" returns immediately because the file is
    already there; extraction, the offline `uv pip sync`, and the warm-up
-   check run as they always do; `.install-complete` is written; the staged
-   copies in `_downloads\` are deleted by the app's usual sweep.
+   check run as they always do; `.install-complete` is written (it holds the
+   manifest version); the staged copies in `_downloads\` are deleted by the
+   app's usual sweep. A newer disc over an older install works the same way:
+   the seed script sees the marker's version differ, copies the new pieces
+   anyway, and the app's update screen installs them from the folder without
+   downloading.
 
 Nothing on the disc is executed except the seed script and the installer.
 
 ### What the disc relies on
 
-Three facts about the app. If any of them changes, `layout.test.mjs` or a
+Four facts about the app. If any of them changes, `layout.test.mjs` or a
 trial install will catch it, but the change should be made knowingly:
 
 | Fact | Where | Why it matters |
@@ -73,6 +77,7 @@ trial install will catch it, but the change should be made knowingly:
 | A file already at its destination is accepted as complete without a network request. | `downloads::fetch`, `src-tauri/src/downloads.rs` (`if dest.exists() { … return Ok(()) }`) | This is the whole mechanism. It also means the app never re-hashes a seeded file, so `seed-components.ps1` is the only integrity check the components get: it hashes while copying, and re-hashes anything already in the folder on a repeat run instead of trusting its size. "Verify installation" still re-hashes models afterwards. The one file the app does re-check is the ComfyUI source tarball: it is pinned by `treeSha256` (the digest of its extracted files, because GitHub may regenerate the archive bytes), which `extract_item` verifies before the tree lands in place — `disc-manifest.json` records the byte hash of the copy the disc carries, and the two checks are independent. |
 | Destinations are `_downloads/<url basename>` for archives (`%2B` → `+`), `<installPath>` for everything else, `<python.wheelhouse>/<filename>` for wheels. | `src-tauri/src/manifest.rs` (`download_dest`, `wheelhouse_dir`, `archive_basename`); mirrored by `lib/layout.mjs` | The staged tree must land byte-for-byte where the wizard looks. |
 | The components dir is read at boot from `%APPDATA%\com.logiscape.stillsong\components-dir.txt` and shown pre-selected by the wizard. | `Supervisor::new` in `src-tauri/src/supervisor.rs`; `runtime_paths` → `SetupScreen` | Lets the user pick a second drive on the disc side without the wizard sending them elsewhere. |
+| `.install-complete` holds the manifest version; a different one routes the app to its update screen, whose preparation keeps every file in `_downloads` that matches the current manifest by name and size (exact for byte-pinned files, within the tree-bound slack for ComfyUI's archive, whose size is nominal) and deletes the rest; `fetch` accepts an existing byte-pinned file only at its pinned size. | `install_state_in`, `prepare_update_in` in `src-tauri/src/supervisor.rs`; `downloads::fetch` | This is what lets a newer disc update an older install offline: the seed script copies the new archives and wheels into `_downloads`, and the update installs from them. |
 
 Two known rough edges, both accepted rather than fixed to keep the online
 process untouched:

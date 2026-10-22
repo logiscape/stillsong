@@ -1,9 +1,12 @@
 # Headless first run through the production Rust code: fetch every pinned
 # runtime artifact (uv, CPython, ComfyUI, llama.cpp, the wheelhouse), extract,
 # sync the Python environment offline with --require-hashes, import torch.
-# Models are skipped (14 GB, and their hashes are checked by the same
-# downloader code this exercises). ~3 GB of downloads; runs only when the
-# manifest or the bootstrap code changes, or on demand.
+# Then the studio-update leg: a legacy install marker must route to the
+# update, preparing it must replace the runtime while keeping the downloads,
+# and the re-install must fetch nothing. Models are skipped (14 GB, and their
+# hashes are checked by the same downloader code this exercises). ~3 GB of
+# downloads; runs only when the manifest or the bootstrap/update code
+# changes, or on demand.
 name: First run
 
 on:
@@ -14,6 +17,7 @@ on:
       - src-tauri/src/manifest.rs
       - src-tauri/src/downloads.rs
       - src-tauri/src/components.rs
+      - src-tauri/src/supervisor.rs
       - .github/workflows/first-run.yml
   pull_request:
     paths:
@@ -21,6 +25,7 @@ on:
       - src-tauri/src/manifest.rs
       - src-tauri/src/downloads.rs
       - src-tauri/src/components.rs
+      - src-tauri/src/supervisor.rs
       - .github/workflows/first-run.yml
   workflow_dispatch:
 

@@ -16,7 +16,8 @@ pub const MANIFEST_JSON: &str = include_str!("../../components.json");
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
-    #[allow(dead_code)] // part of the file format; the frontend records it in settings
+    /// Written into `<components>/.install-complete` at setup's end; a
+    /// different string there routes the next boot to the update screen.
     pub manifest_version: String,
     pub allowed_hosts: Vec<String>,
     pub python: PythonSpec,

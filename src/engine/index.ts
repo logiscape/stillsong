@@ -11,7 +11,7 @@ import type { Job, PhotoAsset, Song, SongSpec, VocalPref } from './domain/types'
 import { AUDIO_FRAMES_PER_SECOND, CAP, DURATION, RENDER_STEPS, canEnhance, defaultSpec, isEnhanceOf, randomSeed } from './domain/types';
 import { validateSpec, type ValidationIssue } from './domain/validate';
 import { capCeiling, hardwareTier, renderCap, type HardwareTier } from './domain/duration';
-import type { HardwareInfo } from './ports';
+import type { HardwareInfo, RuntimeInstallState } from './ports';
 import { buildGraph, type StillsongGraphOpts } from './comfy/graphBuilder';
 import { b64ToBytes, bytesToB64, parseCodesHeader, sliceCodes } from './comfy/codes';
 import { ComfyClient } from './comfy/client';
@@ -86,6 +86,12 @@ export class Engine {
    * degrades to the official node's behavior.
    */
   public hasStillsongEncode = false;
+  /**
+   * Installed components versus this build's manifest, read once at boot.
+   * Anything but `ready` keeps the job queue parked: the supervisor refuses
+   * to start a studio from another manifest, so pumping would only fail jobs.
+   */
+  public installState: RuntimeInstallState = { state: 'ready', version: '', currentVersion: '' };
 
   private constructor(
     private readonly ports: Ports,
@@ -121,6 +127,7 @@ export class Engine {
     engine.tier = hardwareTier(engine.hardware);
     engine.capCeilingSec = capCeiling(engine.hardware.vramMb);
     engine.hasStillsongEncode = await comfy.hasNode('StillsongMusic3TextEncode');
+    engine.installState = await ports.runtime.installState().catch(() => engine.installState);
     await engine.recoverInFlight();
     // After recovery so an in-flight render being harvested on this boot is
     // never mistaken for an orphan (its song row exists either way).
@@ -362,6 +369,10 @@ export class Engine {
   /** Sequential runner: picks the next queued job whenever idle. */
   private async pump(): Promise<void> {
     if (this.running) return;
+    // A studio that is not installed, or is from another build, is never
+    // started (the supervisor refuses); jobs wait, queued, until setup or the
+    // update screen finishes and calls refreshInstallState.
+    if (this.installState.state !== 'ready') return;
     this.running = true;
     try {
       for (;;) {
@@ -680,6 +691,17 @@ export class Engine {
       await this.jobs.setState(job.id, 'failed', { error: 'App restarted mid-render', finishedAt: this.ports.clock.now() });
       await this.songs.setStatus(job.songId, 'failed', 'App restarted mid-render');
     }
+    void this.pump();
+  }
+
+  /**
+   * After first-run setup or the update screen has built the studio: re-read
+   * the install state, re-probe the overlay (it was probed at boot while the
+   * studio was absent or down), and release the jobs that boot left parked.
+   */
+  async refreshInstallState(): Promise<void> {
+    this.installState = await this.ports.runtime.installState().catch(() => this.installState);
+    this.hasStillsongEncode = await this.comfy.hasNode('StillsongMusic3TextEncode');
     void this.pump();
   }
 

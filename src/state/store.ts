@@ -13,8 +13,9 @@ import { CAP, isEnhanceOf, randomSeed } from '@engine/domain/types';
 import { compositionFrames, editPrefixFrames } from '@engine/domain/editPrefix';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
+import { routeForBoot } from './route';
 
-export type Screen = 'setup' | 'create' | 'sanctuary' | 'song' | 'remix' | 'about' | 'draw';
+export type Screen = 'setup' | 'update' | 'create' | 'sanctuary' | 'song' | 'remix' | 'about' | 'draw';
 
 export interface CreationState {
   stage: CreationStage;
@@ -247,17 +248,28 @@ export async function bootstrap(created: Engine): Promise<void> {
         break;
     }
   });
-  const installComplete = engine.settings.installComplete;
-  setState({ ready: true, settings: engine.settings, screen: installComplete ? 'create' : 'setup' });
+  const screen = routeForBoot(engine.installState);
+  setState({ ready: true, settings: engine.settings, screen });
   await refreshLists();
   await probeServices();
   // A reachable studio means the install exists (covers dev mode and repaired
-  // installs); remember it so setup never shows again.
-  if (!installComplete && state.comfyOnline) {
+  // installs); remember it so setup never shows again. Never overrides the
+  // update screen: that one is about *which* studio is installed.
+  if (screen === 'setup' && state.comfyOnline) {
     await saveSettings({ ...engine.settings, installComplete: true });
-    setState({ screen: 'create' });
+    await finishSetup();
   }
   window.setInterval(() => void probeServices(), 15_000);
+}
+
+/**
+ * The last step of first-run setup and of the studio update alike: the
+ * engine re-reads the install state it cached at boot (which parked the job
+ * queue) and goes to Create.
+ */
+export async function finishSetup(): Promise<void> {
+  await getEngine().refreshInstallState();
+  navigate('create');
 }
 
 export async function probeServices(): Promise<void> {
