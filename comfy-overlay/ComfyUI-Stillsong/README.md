@@ -32,9 +32,15 @@ re-apply the marked blocks to a fresh copy, update the hash, and re-run the
 overlay smoke tests (`node scripts/overlay-smoke.mjs`). The check that the copy
 is faithful: take upstream `generate`, dedent it and rename `self` → `ar_self`,
 and `diff` it against `stillsong_generate`; the residual must be only the
-signature/docstring, the `Stillsong:` blocks, the `enable_graph` variable and
-the return tuple. Forced frames deliberately skip `malloc_graph_begin` (they run
-eagerly, outside the malloc graph, as upstream's frame 0 does).
+signature/docstring, the `Stillsong:` blocks and the return tuple. Forced
+frames must stay on upstream's fast path: they open the malloc graph like any
+other frame (the backbone's per-block CUDA graphs only run inside it), and the
+forced depth core is CUDA-graphed too, reading its row from a fixed buffer, with
+the decoder's captured graph dropped at the first free frame. Running forced
+frames eagerly is invisible in the output (it is bit-identical) but made a
+forced song compose ~4x slower on 0.42.4. After every bump, re-time a forced
+render against a free one (same seed and inputs, full and partial prefixes):
+encode frames/s and GPU utilization should match.
 
 This is not a general-purpose custom node package; it is versioned with, and
 installed by, the Stillsong app (into `comfy-data/custom_nodes/`). Stillsong's

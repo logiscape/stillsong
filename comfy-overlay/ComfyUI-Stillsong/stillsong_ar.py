@@ -140,6 +140,10 @@ def stillsong_generate(
             raise ValueError(f"prefix codes must be [frames, {ar_self.num_codebooks}], got {tuple(prefix_codes.shape)}")
         forced = prefix_codes.to(device=device, dtype=torch.long)
         n_forced = min(int(forced.shape[0]), decode_limit + 1)
+        # Stillsong: the forced depth core reads its row from this fixed
+        # buffer, so a CUDA graph captured on one forced frame replays
+        # correctly on the next (forced frames compose as fast as free ones).
+        depth_io["force"] = torch.empty((ar_self.num_codebooks,), dtype=torch.long, device=device)
     captured = torch.empty((decode_limit + 1, ar_self.num_codebooks), dtype=torch.long, device=device)
     captured_rows = 0
 
@@ -176,12 +180,7 @@ def stillsong_generate(
                     break
 
         force_row = forced[frame_index] if frame_index < n_forced else None
-        # Stillsong: forced frames run outside the malloc graph, like upstream's
-        # frame 0 — their eager, data-dependent allocations would otherwise be
-        # recorded as graph breaks. Forced frames always precede free ones, so
-        # the graph is first recorded at the first free frame, as upstream
-        # records it at frame 1.
-        if frame_index and force_row is None:
+        if frame_index:
             comfy.model_prefetch.malloc_graph_begin(device)
         c0, code_or_stop, stop_token = ar_self._sample_c0(last_hidden, cfg_scale, top_k, generator, vocab_mask)
         if force_row is not None:
@@ -204,30 +203,31 @@ def stillsong_generate(
         depth_io["c0_embed"].copy_(c0_embed)
 
         if force_row is None:
+            # Stillsong: the decoder's cached CUDA graph replays whichever core
+            # it captured; drop the forced core's at the first free frame.
+            if frame_index == n_forced and n_forced:
+                comfy.model_prefetch._drop_graph(decoder)
             def depth_core():
                 codes, depth_hidden = ar_self._depth_codes(
                     depth_io["hidden"], depth_io["c0"], depth_io["c0_embed"], generator, execution_dtype, cfg_scale, top_k
                 )
                 depth_io["codes"].copy_(codes)
                 depth_io["depth_hidden"].copy_(depth_hidden)
-            enable_graph = True
         else:
+            depth_io["force"].copy_(force_row)
             def depth_core():
                 codes, depth_hidden = _depth_codes_forced(
                     ar_self, depth_io["hidden"], depth_io["c0"], depth_io["c0_embed"], generator, execution_dtype,
-                    cfg_scale, top_k, force_row,
+                    cfg_scale, top_k, depth_io["force"],
                 )
                 depth_io["codes"].copy_(codes)
                 depth_io["depth_hidden"].copy_(depth_hidden)
-            # Stillsong: the forced core has data-dependent inputs per frame,
-            # which CUDA graph capture cannot express — run it eagerly.
-            enable_graph = False
 
         depth_queue = comfy.model_prefetch.make_prefetch_queue(
             [[decoder, ar_self.model.audio_extra_embedding]], device, {"prefetch_dynamic_vbars": True}
         )
         comfy.model_prefetch.prefetch_queue_pop(
-            depth_queue, device, decoder, execution_dtype, core=depth_core, enable_graph=enable_graph,
+            depth_queue, device, decoder, execution_dtype, core=depth_core, enable_graph=True,
             generator=generator, malloc_scope="depth"
         )
         comfy.model_prefetch.prefetch_queue_pop(
