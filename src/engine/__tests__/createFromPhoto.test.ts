@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { Engine } from '@engine/index';
 import { instrumentalSkeleton } from '@engine/cowriter/cowriter';
+import { COMPOSE_SCHEMA } from '@engine/cowriter/guides';
 import { renderCap } from '@engine/domain/duration';
 import { DURATION, RENDER_STEPS } from '@engine/domain/types';
 import { flush, makePorts } from './fakes';
@@ -80,6 +81,10 @@ describe('Engine.createFromPhoto', () => {
     const parts = vision!.content as { type: string }[];
     expect(parts[0].type).toBe('image_url');
     expect(parts[1].type).toBe('text');
+
+    // Compose is schema-constrained in the nested shape: llama-server ignores
+    // a flat `schema` beside type "json_schema" and accepts any object.
+    expect(world.llmCalls[1].response_format).toEqual({ type: 'json_schema', json_schema: { schema: COMPOSE_SCHEMA } });
 
     world.historyStatus = 'success';
     await clock.advance(10_000);

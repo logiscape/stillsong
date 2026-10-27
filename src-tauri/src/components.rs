@@ -339,13 +339,17 @@ pub async fn components_extract(
 
 /// Drops every inherited variable that could steer Python, pip or uv away
 /// from our private environment: a user's PYTHONPATH (ComfyUI would import
-/// their torch), an active conda/venv, a global index URL or cache. Applied
-/// to the uv install and to every python child the supervisor spawns.
+/// their torch), an active conda/venv, a global index URL or cache — and
+/// llama-server's `LLAMA_ARG_*`, which set any flag we do not pass (a model
+/// download, an API key, the `--connect` WebRTC tunnel of b11744+). Applied
+/// to the uv install and to every python and llama-server child the
+/// supervisor spawns.
 pub fn scrub_inherited_env(cmd: &mut std::process::Command) {
     for (k, _) in std::env::vars_os() {
         let key = k.to_string_lossy().to_ascii_uppercase();
         if key.starts_with("UV_")
             || key.starts_with("PIP_")
+            || key.starts_with("LLAMA_ARG_")
             || matches!(
                 key.as_str(),
                 "PYTHONPATH"
@@ -753,6 +757,7 @@ mod tests {
         std::env::set_var("UV_INDEX_URL", "https://evil.example/simple");
         std::env::set_var("PIP_INDEX_URL", "https://evil.example/simple");
         std::env::set_var("CONDA_PREFIX", r"C:\conda");
+        std::env::set_var("LLAMA_ARG_CONNECT", "1");
         let mut cmd = std::process::Command::new("x");
         scrub_inherited_env(&mut cmd);
         let removed: Vec<String> = cmd
@@ -765,6 +770,7 @@ mod tests {
             "UV_INDEX_URL",
             "PIP_INDEX_URL",
             "CONDA_PREFIX",
+            "LLAMA_ARG_CONNECT",
         ] {
             assert!(
                 removed.contains(&k.to_string()),
@@ -777,6 +783,7 @@ mod tests {
             "UV_INDEX_URL",
             "PIP_INDEX_URL",
             "CONDA_PREFIX",
+            "LLAMA_ARG_CONNECT",
         ] {
             std::env::remove_var(k);
         }

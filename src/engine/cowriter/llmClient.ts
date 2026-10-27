@@ -2,8 +2,10 @@
 // runtime). One model per server instance, so no model field is sent. The
 // context size is fixed at launch (-c), not per request. Vision goes through
 // the standard content-array shape with a data: URL; constrained JSON uses
-// llama.cpp's `response_format: {type:"json_schema", schema}` (grammar
-// sampling — the schema is enforced, not suggested).
+// OpenAI's nested `response_format: {type:"json_schema", json_schema:{schema}}`
+// (grammar sampling — the schema is enforced, not suggested). Do not flatten
+// it: llama-server reads only `json_schema.schema` for that type and silently
+// falls back to "any object" for `{type:"json_schema", schema}`.
 
 import type { HttpTransport } from '../ports';
 
@@ -65,7 +67,7 @@ export class LlmClient {
         messages: messages.map(toOpenAi),
         temperature: opts.temperature ?? 0.7,
         stream: false,
-        response_format: opts.format ? { type: 'json_schema', schema: opts.format } : undefined,
+        response_format: opts.format ? { type: 'json_schema', json_schema: { schema: opts.format } } : undefined,
       },
       600_000,
     );
