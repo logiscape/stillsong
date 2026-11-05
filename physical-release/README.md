@@ -99,9 +99,9 @@ process untouched:
   and survives runs.
 - A Blu-ray recorder and blank **BD-R** media for burning. Use HTL (inorganic)
   or M-DISC discs, not LTH. Single-layer 25 GB discs are 25,025,314,816 bytes;
-  the current component set is 24,516,062,770 bytes (the six ComfyUI
+  the current component set is 24,532,070,999 bytes (the six ComfyUI
   template-gallery media wheels, 513 MB, are excluded via `python.exclude`),
-  which leaves about 509 MB for everything else, or about 442 MB after the
+  which leaves about 493 MB for everything else, or about 426 MB after the
   64 MiB file-system reserve. Single layer fits today with the stock installer
   and licenses; a model bump of any size will push it to **BD-R DL (50 GB)**.
   The build refuses a medium the payload does not fit.

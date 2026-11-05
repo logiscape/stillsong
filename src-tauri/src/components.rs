@@ -112,7 +112,9 @@ pub fn extract_item(comp: &Path, item: &Item) -> Result<(), String> {
             std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
             let file = std::fs::File::open(&archive).map_err(|e| e.to_string())?;
             let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-            // ZipArchive::extract sanitises names (enclosed_name) itself.
+            // ZipArchive::extract confines every entry (and every symlink
+            // target) to `dest` itself, one path component at a time. The
+            // bytes are sha256-pinned before we get here anyway.
             zip.extract(&dest).map_err(|e| e.to_string())
         }
         ("tar.gz-strip1", None) => {

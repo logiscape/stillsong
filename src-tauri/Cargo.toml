@@ -27,7 +27,7 @@ base64 = "0.22"
 image = "0.25"
 win32job = "2"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 flate2 = "1"
 tar = "0.4"
 id3 = "1"
