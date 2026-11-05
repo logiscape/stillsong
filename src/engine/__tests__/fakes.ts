@@ -44,7 +44,7 @@ export interface FakeWorld {
   /** Scripted /v1/chat/completions contents, shifted per call. */
   llmResponses: string[];
   /** Every chat request body, in order. */
-  llmCalls: { messages: { role: string; content: unknown }[]; response_format?: unknown }[];
+  llmCalls: { messages: { role: string; content: unknown }[]; response_format?: unknown; chat_template_kwargs?: unknown }[];
   llmHealthy: boolean;
   /** When true, the fake ComfyUI has the Stillsong overlay node and emits a codes file. */
   stillsongNode: boolean;

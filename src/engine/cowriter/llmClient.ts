@@ -6,6 +6,12 @@
 // (grammar sampling — the schema is enforced, not suggested). Do not flatten
 // it: llama-server reads only `json_schema.schema` for that type and silently
 // falls back to "any object" for `{type:"json_schema", schema}`.
+//
+// Thinking is off for every request (`chat_template_kwargs.enable_thinking`):
+// Gemma 4 otherwise reasons for thousands of tokens the app discards, making
+// a photo -> lyrics pass ~5x slower and letting a repair turn think until the
+// context is full. The Gemma 4 template prefills an empty thought channel
+// when thinking is off, so the schema grammar still applies to the JSON.
 
 import type { HttpTransport } from '../ports';
 
@@ -67,6 +73,7 @@ export class LlmClient {
         messages: messages.map(toOpenAi),
         temperature: opts.temperature ?? 0.7,
         stream: false,
+        chat_template_kwargs: { enable_thinking: false },
         response_format: opts.format ? { type: 'json_schema', json_schema: { schema: opts.format } } : undefined,
       },
       600_000,

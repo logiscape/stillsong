@@ -86,6 +86,9 @@ describe('Engine.createFromPhoto', () => {
     // a flat `schema` beside type "json_schema" and accepts any object.
     expect(world.llmCalls[1].response_format).toEqual({ type: 'json_schema', json_schema: { schema: COMPOSE_SCHEMA } });
 
+    // Thinking is off on every songwriter request (photo card and compose).
+    for (const c of world.llmCalls) expect(c.chat_template_kwargs).toEqual({ enable_thinking: false });
+
     world.historyStatus = 'success';
     await clock.advance(10_000);
     await flush();
