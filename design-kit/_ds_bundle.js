@@ -2891,7 +2891,7 @@ function SettingsScreen() {
     }
   }, "Stillsong"), /*#__PURE__*/React.createElement(Badge, {
     mono: true
-  }, "1.0.0")), /*#__PURE__*/React.createElement("p", {
+  }, "1.1.0")), /*#__PURE__*/React.createElement("p", {
     style: {
       font: "var(--ui-md)",
       color: "var(--text-body)",
