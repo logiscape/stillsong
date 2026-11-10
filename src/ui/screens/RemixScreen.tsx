@@ -5,12 +5,12 @@
 
 import React, { useMemo, useState } from 'react';
 import type { Mp3Quality, PlanMode, SongSpec } from '@engine/domain/types';
-import { randomSeed } from '@engine/domain/types';
 import { renderCap } from '@engine/domain/duration';
 import { lintSong } from '@engine/cowriter/linter';
 import { estimateSeconds, wordCount } from '@engine/cowriter/lyrics';
 import { validateSpec } from '@engine/domain/validate';
-import { canKeepMelody, enqueueRemix, navigate, remixAbc, remixSpec, thumbSrc, useAppState } from '@state/store';
+import { enqueueRemix, navigate, remixSpec, thumbSrc, useAppState } from '@state/store';
+import { canKeepMelody, offersMelodyChoice, remixNeedsNewSeed, remixTake } from '@state/remix';
 import { fmtDuration } from '@ui/ds/format';
 import { Badge } from '@ui/ds/Badge';
 import { Button } from '@ui/ds/Button';
@@ -86,12 +86,20 @@ export function RemixScreen(): React.ReactElement | null {
   const est = estimateSeconds(spec.lyrics);
   const planOff = spec.planMode === 'off';
   const planEdited = !planOff && planText.trim() !== '' && planText !== (original.planAbc ?? '');
-  // A different plan mode asks for a different kind of plan: write a new one.
-  const modeChanged = spec.planMode !== original.spec.planMode;
+  const choice = { keepSeed: seedMode === 'keep', keepMelody: melody === 'keep', editedAbc: planEdited ? planText : undefined };
+  const showMelody = offersMelodyChoice(original, spec, choice.editedAbc);
+  // A new melody needs a new seed (the same seed writes the same plan), so
+  // Feel shows "New seed" while it is chosen; picking "Keep original" then
+  // goes back to the original melody, the only way to keep the original feel.
+  const forcedNewSeed = remixNeedsNewSeed(original, spec, choice);
+  const feel = forcedNewSeed ? 'new' : seedMode;
+  const pickFeel = (v: 'keep' | 'new') => {
+    if (v === 'keep' && forcedNewSeed) setMelody('keep');
+    setSeedMode(v);
+  };
 
   const create = () => {
-    const seed = seedMode === 'keep' ? original.spec.seed : randomSeed();
-    const abc = planOff ? undefined : remixAbc(original, melody === 'keep' && !modeChanged, planEdited ? planText : undefined);
+    const { seed, abc } = remixTake(original, spec, choice);
     void enqueueRemix({ ...spec, seed, abc }, original.id);
   };
 
@@ -124,11 +132,11 @@ export function RemixScreen(): React.ReactElement | null {
             </div>
           </div>
           <SegmentedChoice
-            label="Feel" value={seedMode} onChange={(v) => setSeedMode(v as 'keep' | 'new')}
+            label="Feel" value={feel} onChange={(v) => pickFeel(v as 'keep' | 'new')}
             options={[{ value: 'keep', label: 'Keep original', icon: 'lock' }, { value: 'new', label: 'New seed', icon: 'dices' }]}
             style={{ maxWidth: 320 }}
           />
-          {melodyAvailable && !planOff && !planEdited && !modeChanged && (
+          {showMelody && (
             <>
               <SegmentedChoice
                 label="Melody" value={melody} onChange={(v) => setMelody(v as 'keep' | 'new')}
@@ -140,7 +148,7 @@ export function RemixScreen(): React.ReactElement | null {
                   ? seedMode === 'keep'
                     ? 'Sings the original tune again. With nothing else changed it is the same take; your edits change how it is sung and played.'
                     : 'Sings the original tune again with a new feel: voices and instruments can change.'
-                  : 'Writes a new melody for the song.'}
+                  : 'Writes a new melody for the song, with a new feel.'}
               </span>
             </>
           )}

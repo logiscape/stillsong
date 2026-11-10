@@ -385,26 +385,9 @@ export async function cancelCreation(): Promise<void> {
   await refreshLists();
 }
 
-/** Starting spec for the Remix editor: same everything, fresh seed; the plan is chosen on Create. */
+/** Starting spec for the Remix editor: same everything, fresh seed; seed and plan are chosen on Create (`remixTake`). */
 export function remixSpec(song: Song): SongSpec {
   return { ...song.spec, seed: randomSeed(), abc: undefined };
-}
-
-/** Whether a remix of this song can keep its melody (it performed a saved plan). */
-export function canKeepMelody(song: Song): boolean {
-  return !!song.planAbc?.trim() && song.spec.planMode !== 'off';
-}
-
-/**
- * The plan a remix performs. "Keep melody" re-performs the original's plan
- * (verified 2026-11-10: the same plan with a new seed, or with an edited
- * lyric line, keeps a recognizable melody — voices and instruments can shift;
- * with the same seed and unchanged inputs it is the identical performance).
- * Otherwise the remix writes a new plan. A hand-edited plan wins over both.
- */
-export function remixAbc(original: Song, keepMelody: boolean, editedAbc?: string): string | undefined {
-  if (editedAbc?.trim()) return editedAbc;
-  return keepMelody && canKeepMelody(original) ? original.planAbc : undefined;
 }
 
 // ---- song actions ----------------------------------------------------------
