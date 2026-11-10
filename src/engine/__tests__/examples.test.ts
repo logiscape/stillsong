@@ -6,23 +6,21 @@
 import { describe, expect, it } from 'vitest';
 import { Engine } from '@engine/index';
 import { EXAMPLES_SEEDED_KEY, type ExamplesManifest } from '@engine/examples';
-import { defaultSpec, MODEL_FILES } from '@engine/domain/types';
+import { defaultSpec } from '@engine/domain/types';
 import { makePorts } from './fakes';
 
 const DIR = 'C:\\res\\examples';
 const b64 = (s: string) => Buffer.from(s).toString('base64');
 
 function spec(title: string, seed: string) {
-  const { photo: _photo, ...rest } = defaultSpec(MODEL_FILES.ditFp16);
+  const { photo: _photo, ...rest } = defaultSpec();
   return {
     ...rest,
     title,
     caption: 'Global Metadata: quiet folk.',
     lyrics: '[intro]\n[verse]\nA line\n[outro]',
     targetSec: 120,
-    durationSec: 300,
     seed,
-    steps: 40,
     vocalPref: 'female' as const,
   };
 }
@@ -37,7 +35,7 @@ const MANIFEST: ExamplesManifest = {
       hitCeiling: false,
       photo: { file: 'moonlit-forest.jpg', source: 'photo', analysis: { card: 'Subjects: bare trees.', source: 'photo' } },
       audio: 'moonlit.mp3',
-      codes: 'moonlit.codes.bin',
+      abc: 'X:1\nK:Dm\n% verse\nV: Vocal\nd4f4a4|',
     },
     {
       id: 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2',
@@ -72,7 +70,7 @@ describe('bundled examples', () => {
 
     const moonlit = songs[0];
     expect(moonlit.outputPath).toBe(`C:\\lib\\songs/${moonlit.id}.mp3`);
-    expect(moonlit.codesPath).toBe(`C:\\lib\\songs/${moonlit.id}.codes.bin`);
+    expect(moonlit.planAbc).toBe(MANIFEST.songs[0].abc);
     expect(moonlit.actualSec).toBe(191.5);
     expect(moonlit.hitCeiling).toBe(false);
     expect(moonlit.spec.seed).toBe('111');
@@ -89,7 +87,7 @@ describe('bundled examples', () => {
     // The drawing went through the sketchpad path: bytes written, source kept.
     const spark = songs[1];
     expect(spark.spec.photo?.source).toBe('drawing');
-    expect(spark.codesPath).toBeUndefined();
+    expect(spark.planAbc).toBeUndefined();
     expect(files.written).toContainEqual({ relPath: expect.stringMatching(/^photos\/.*\.png$/), b64: b64('png-bytes') });
 
     // No job rows: nothing to recover or run.
@@ -144,7 +142,7 @@ describe('bundled examples', () => {
     await engine.deleteSong(moonlit.id);
     expect(await engine.songs.byId(moonlit.id)).toBeNull();
     expect(await engine.photos.byId(photoId)).toBeNull();
-    expect(files.removed).toEqual(expect.arrayContaining([moonlit.outputPath, moonlit.codesPath, 'C:\\lib\\photos/moonlit-forest.jpg']));
+    expect(files.removed).toEqual(expect.arrayContaining([moonlit.outputPath, 'C:\\lib\\photos/moonlit-forest.jpg']));
 
     // Still gone on the next boot.
     const next = await Engine.create(ports);

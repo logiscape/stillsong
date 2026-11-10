@@ -13,6 +13,8 @@ export interface HistoryEntry {
   error?: string;
   /** Every file-shaped output (audio appears under the `audio` key). */
   files: ComfyOutputFile[];
+  /** Text outputs by node id (PreviewAny's `{ text: [value] }`): the plan, the length. */
+  texts: Record<string, string>;
 }
 
 export interface QueueInfo {
@@ -76,7 +78,7 @@ export class ComfyClient {
     return JSON.parse(r.body);
   }
 
-  /** Whether a node class is registered (e.g. the Stillsong overlay's encoder). */
+  /** Whether a node class is registered (e.g. YuE2GenerateMusic on a ComfyUI new enough to have it). */
   async hasNode(nodeClass: string): Promise<boolean> {
     try {
       const info = await this.objectInfo(nodeClass);
@@ -86,7 +88,7 @@ export class ComfyClient {
     }
   }
 
-  /** Model files visible to a loader node's combo input (e.g. UNETLoader/unet_name). */
+  /** Model files visible to a loader node's combo input (e.g. CheckpointLoaderSimple/ckpt_name). */
   async availableModels(nodeClass: string, inputName: string): Promise<string[]> {
     const info = await this.objectInfo(nodeClass);
     const node = (info as Record<string, { input?: { required?: Record<string, unknown[]> } }>)[nodeClass];
@@ -151,7 +153,10 @@ interface HistoryRaw {
 export function parseHistoryEntry(entry: HistoryRaw): HistoryEntry {
   const statusStr = entry.status?.status_str ?? 'unknown';
   const files: ComfyOutputFile[] = [];
-  for (const nodeOut of Object.values(entry.outputs ?? {})) {
+  const texts: Record<string, string> = {};
+  for (const [nodeId, nodeOut] of Object.entries(entry.outputs ?? {})) {
+    const text = (nodeOut as { text?: unknown }).text;
+    if (Array.isArray(text) && typeof text[0] === 'string') texts[nodeId] = text[0];
     for (const val of Object.values(nodeOut)) {
       if (!Array.isArray(val)) continue;
       for (const item of val) {
@@ -179,5 +184,5 @@ export function parseHistoryEntry(entry: HistoryRaw): HistoryEntry {
         : statusStr === 'interrupted'
           ? 'interrupted'
           : 'running';
-  return { status, error, files };
+  return { status, error, files, texts };
 }

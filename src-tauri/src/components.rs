@@ -795,16 +795,16 @@ mod tests {
     /// every manifest artifact is fetched (resume + hash), archives are
     /// extracted, the Python environment is synced offline, and the result
     /// imports torch with CUDA. Needs the network and ~40 GB; runs only when
-    /// STILLSONG_E2E_COMPONENTS names the target dir. With
-    /// STILLSONG_E2E_SKIP_MODELS=1 the model files are skipped (the runtime
+    /// STILLSONG2_E2E_COMPONENTS names the target dir. With
+    /// STILLSONG2_E2E_SKIP_MODELS=1 the model files are skipped (the runtime
     /// legs alone, ~4.6 GB).
     #[tokio::test]
     async fn first_run_headless() {
-        let Ok(dir) = std::env::var("STILLSONG_E2E_COMPONENTS") else {
+        let Ok(dir) = std::env::var("STILLSONG2_E2E_COMPONENTS") else {
             return;
         };
         let comp = PathBuf::from(dir);
-        let skip_models = std::env::var("STILLSONG_E2E_SKIP_MODELS").is_ok();
+        let skip_models = std::env::var("STILLSONG2_E2E_SKIP_MODELS").is_ok();
         let m = manifest::manifest();
         let best = std::sync::Mutex::new(std::collections::HashMap::new());
         let cancel = AtomicBool::new(false);
@@ -838,6 +838,12 @@ mod tests {
         let out = run_capture(probe).unwrap();
         eprintln!("torch: {out}");
         assert!(out.contains("+cu130"), "{out}");
+
+        // Stillsong 2 builds its graphs from ComfyUI's core YuE2 nodes (no
+        // custom nodes): the pinned commit must ship them.
+        for f in ["comfy_extras/nodes_yue2.py", "comfy/text_encoders/yue2.py"] {
+            assert!(comp.join("ComfyUI").join(f).is_file(), "missing {f}");
+        }
 
         // Idempotent: a second bootstrap is a no-op that still succeeds.
         bootstrap_python(&comp, &|_| {}).unwrap();

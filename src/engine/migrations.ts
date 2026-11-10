@@ -66,9 +66,9 @@ import type { Db } from './ports';
 /** ALTER TABLE has no IF NOT EXISTS in SQLite; guard each added column by pragma lookup. */
 const ADDED_COLUMNS: { table: string; column: string; ddl: string }[] = [
   { table: 'song', column: 'hit_ceiling', ddl: `ALTER TABLE song ADD COLUMN hit_ceiling INTEGER` },
-  { table: 'song', column: 'codes_path', ddl: `ALTER TABLE song ADD COLUMN codes_path TEXT` },
-  { table: 'song', column: 'prefix_song_id', ddl: `ALTER TABLE song ADD COLUMN prefix_song_id TEXT` },
-  { table: 'song', column: 'prefix_frames', ddl: `ALTER TABLE song ADD COLUMN prefix_frames INTEGER` },
+  // Stillsong 1 added codes_path / prefix_song_id / prefix_frames here (the
+  // composition codes). Stillsong 2 has its own database and never had them.
+  { table: 'song', column: 'plan_abc', ddl: `ALTER TABLE song ADD COLUMN plan_abc TEXT` },
   { table: 'photo_asset', column: 'thumb_path', ddl: `ALTER TABLE photo_asset ADD COLUMN thumb_path TEXT` },
   { table: 'photo_asset', column: 'luminance', ddl: `ALTER TABLE photo_asset ADD COLUMN luminance REAL` },
   { table: 'photo_asset', column: 'dominant_color', ddl: `ALTER TABLE photo_asset ADD COLUMN dominant_color TEXT` },

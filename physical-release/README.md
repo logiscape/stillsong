@@ -1,5 +1,12 @@
 # Physical release
 
+> **Stillsong 2 status:** paths, the registry key, the disc-fit test and the
+> license set (`licenses.json` pins YuE2's `MODEL_LICENSE`) are updated for
+> Stillsong 2 (`com.logiscape.stillsong2`; 13.2 GB of components, ~10.8 GB
+> single-layer headroom). The sizes, counts and verification log below still
+> describe Stillsong 1's disc: do a full build and verify before shipping a
+> Stillsong 2 disc, and give it away — the YuE2 license forbids selling it.
+
 Tooling to put Stillsong on a Blu-ray disc or a USB drive: the installer,
 every component first-run setup would otherwise download, the license of
 each, and the source. A PC that has never been online can install from it
@@ -37,7 +44,7 @@ X:\
     _downloads\<archives>            uv, CPython, ComfyUI source, llama.cpp, cudart
     _downloads\wheelhouse\*.whl      the 79 pinned wheels
     models\*.gguf                    Gemma 4 (already at its install path)
-    comfy-data\models\...            MiniMax Music 3 (already at its install path)
+    comfy-data\models\...            YuE2 (already at its install path)
   licenses\                see collect-licenses.ps1
   source\                  git archive of the release commit (GPL-3.0 §6a)
 ```
@@ -48,11 +55,11 @@ X:\
    optical drive). It launches `setup\seed-components.ps1` with PowerShell
    5.1, which every supported Windows has.
 2. The script asks where the components should live (default:
-   `%LOCALAPPDATA%\com.logiscape.stillsong\components`), checks free space,
+   `%LOCALAPPDATA%\com.logiscape.stillsong2\components`), checks free space,
    and copies each file from `components\` while hashing it, refusing any
    mismatch. From a 6x Blu-ray that is 15–30 minutes; from USB 3, a few.
-3. It writes the chosen folder to `%APPDATA%\com.logiscape.stillsong\components-dir.txt`
-   and the `HKCU\Software\Logiscape\Stillsong\ComponentsDir` registry value,
+3. It writes the chosen folder to `%APPDATA%\com.logiscape.stillsong2\components-dir.txt`
+   and the `HKCU\Software\Logiscape\Stillsong 2\ComponentsDir` registry value,
    exactly as the app's own "Where should they live?" step does.
 4. It runs the NSIS installer, interactively, unchanged.
 5. The user opens Stillsong. The wizard runs its normal steps; the folder is
@@ -76,7 +83,7 @@ trial install will catch it, but the change should be made knowingly:
 |---|---|---|
 | A file already at its destination is accepted as complete without a network request. | `downloads::fetch`, `src-tauri/src/downloads.rs` (`if dest.exists() { … return Ok(()) }`) | This is the whole mechanism. It also means the app never re-hashes a seeded file, so `seed-components.ps1` is the only integrity check the components get: it hashes while copying, and re-hashes anything already in the folder on a repeat run instead of trusting its size. "Verify installation" still re-hashes models afterwards. The one file the app does re-check is the ComfyUI source tarball: it is pinned by `treeSha256` (the digest of its extracted files, because GitHub may regenerate the archive bytes), which `extract_item` verifies before the tree lands in place — `disc-manifest.json` records the byte hash of the copy the disc carries, and the two checks are independent. |
 | Destinations are `_downloads/<url basename>` for archives (`%2B` → `+`), `<installPath>` for everything else, `<python.wheelhouse>/<filename>` for wheels. | `src-tauri/src/manifest.rs` (`download_dest`, `wheelhouse_dir`, `archive_basename`); mirrored by `lib/layout.mjs` | The staged tree must land byte-for-byte where the wizard looks. |
-| The components dir is read at boot from `%APPDATA%\com.logiscape.stillsong\components-dir.txt` and shown pre-selected by the wizard. | `Supervisor::new` in `src-tauri/src/supervisor.rs`; `runtime_paths` → `SetupScreen` | Lets the user pick a second drive on the disc side without the wizard sending them elsewhere. |
+| The components dir is read at boot from `%APPDATA%\com.logiscape.stillsong2\components-dir.txt` and shown pre-selected by the wizard. | `Supervisor::new` in `src-tauri/src/supervisor.rs`; `runtime_paths` → `SetupScreen` | Lets the user pick a second drive on the disc side without the wizard sending them elsewhere. |
 | `.install-complete` holds the manifest version; a different one routes the app to its update screen, whose preparation keeps every file in `_downloads` that matches the current manifest by name and size (exact for byte-pinned files, within the tree-bound slack for ComfyUI's archive, whose size is nominal) and deletes the rest; `fetch` accepts an existing byte-pinned file only at its pinned size. | `install_state_in`, `prepare_update_in` in `src-tauri/src/supervisor.rs`; `downloads::fetch` | This is what lets a newer disc update an older install offline: the seed script copies the new archives and wheels into `_downloads`, and the update installs from them. |
 
 Two known rough edges, both accepted rather than fixed to keep the online
@@ -120,7 +127,7 @@ process untouched:
 node --test physical-release/lib/layout.test.mjs
 
 # everything, writing an .iso (reuse models from a local install to skip 22 GB of download)
-.\physical-release\build-physical.ps1 -FromComponents "$env:LOCALAPPDATA\com.logiscape.stillsong\components" -Iso
+.\physical-release\build-physical.ps1 -FromComponents "$env:LOCALAPPDATA\com.logiscape.stillsong2\components" -Iso
 
 # burn a disc from the already-assembled tree, then verify it
 .\physical-release\make-image.ps1 -ListRecorders
@@ -184,11 +191,14 @@ when the first disc ships. Per license:
   holds a `git archive` of the release commit, and ComfyUI is already on the
   disc as its source tarball. Keep the tree clean when building so the
   archive corresponds to the binary.
-- **MiniMax-Music3 Community License**: §1 requires its notice with every
-  copy (`licenses\models\MiniMax-Music3\`). The UI-display clause (§3.1) is
-  for commercial products and the revenue threshold (§3.2) is $20M; neither
-  applies to a free GPL app. The machine-generated disclosure the AUP asks
-  for is already written into exported songs.
+- **YuE2 weights — CC BY-NC 4.0 with the authors' creator permission**
+  (`licenses\models\YuE2\`: the pinned `MODEL_LICENSE`, which includes the
+  unmodified CC BY-NC 4.0 legal code, plus a NOTICE naming the work, the
+  authors, the Comfy-Org repackaging and the source repositories — CC BY-NC
+  4.0's attribution and license-text conditions for sharing the weights). The
+  disc redistributes the weights, and the creator permission "does not extend
+  to commercial redistribution or sale of the model weights", so the disc may
+  only be given away, never sold.
 - **Gemma 4**: Apache-2.0; text plus a NOTICE are included.
 - **NVIDIA CUDA runtime** (cudart zip from the llama.cpp release; DLLs inside
   the torch wheel): the CUDA EULA's Attachment A allows redistribution only

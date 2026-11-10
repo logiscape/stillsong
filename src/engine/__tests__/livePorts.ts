@@ -1,4 +1,4 @@
-// Node-based ports for live tests (STILLSONG_LIVE=1): real HTTP against local
+// Node-based ports for live tests (STILLSONG2_LIVE=1): real HTTP against local
 // ComfyUI, a real llama-server child process for the songwriter, node:sqlite
 // in-memory DB, filesystem file store. The Ws transport defaults to a stub
 // that never connects, which exercises the engine's history-polling fallback
@@ -17,13 +17,13 @@ const require_ = createRequire(import.meta.url);
 
 // Dev-machine component layout (mirrors the app's default components dir).
 const COMPONENTS =
-  process.env.STILLSONG_COMPONENTS ??
-  path.join(process.env.LOCALAPPDATA ?? '', 'com.logiscape.stillsong', 'components');
+  process.env.STILLSONG2_COMPONENTS ??
+  path.join(process.env.LOCALAPPDATA ?? '', 'com.logiscape.stillsong2', 'components');
 const LLAMA_EXE = path.join(COMPONENTS, 'llama', 'llama-server.exe');
 const LLM_MODEL = path.join(COMPONENTS, 'models', 'gemma-4-12B-it-Q4_0.gguf');
 const LLM_MMPROJ = path.join(COMPONENTS, 'models', 'mmproj-gemma-4-12B-it-Q8_0.gguf');
-const LLM_PORT = 17801;
-const COMFY_URL = process.env.STILLSONG_COMFY_URL ?? 'http://127.0.0.1:8000';
+const LLM_PORT = 17901; // inside Stillsong 2's range; Stillsong 1 uses 17800-17899
+const COMFY_URL = process.env.STILLSONG2_COMFY_URL ?? 'http://127.0.0.1:8000';
 
 export function llamaAvailable(): boolean {
   return fsSync.existsSync(LLAMA_EXE) && fsSync.existsSync(LLM_MODEL) && fsSync.existsSync(LLM_MMPROJ);
@@ -164,12 +164,12 @@ export function nodeRuntime(): Runtime & { dispose(): Promise<void> } {
     comfyOutputs: async () => [],
     removeComfyOutput: async () => {},
     urls: async () => ({ comfy: COMFY_URL, llm: `http://127.0.0.1:${LLM_PORT}` }),
-    // STILLSONG_VRAM_MB / STILLSONG_RAM_MB mirror the gpu.rs dev overrides so
+    // STILLSONG2_VRAM_MB / STILLSONG2_RAM_MB mirror the gpu.rs dev overrides so
     // live runs can exercise the Patient-tier engine paths under emulation.
     hardware: async () => ({
       vendor: 'nvidia',
-      vramMb: Number(process.env.STILLSONG_VRAM_MB) || 16_303,
-      ramMb: Number(process.env.STILLSONG_RAM_MB) || 65_536,
+      vramMb: Number(process.env.STILLSONG2_VRAM_MB) || 16_303,
+      ramMb: Number(process.env.STILLSONG2_RAM_MB) || 65_536,
     }),
     dispose: stopLlm,
   };

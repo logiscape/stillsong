@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "songs": [
     {
       "id": "f4ceeae0ee7d4766b08e47691fd83627",
@@ -10,20 +10,20 @@
         "lyrics": "[intro]\n\n[verse]\nThe branches reach like frozen bone\nA path of ice, I walk alone\nThe silver orb begins to burn\nTo every shadow, I return\n\n[pre-chorus]\nThe forest breathes, a hollow sigh\nBeneath the lid of winter's sky\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[verse]\nA spark of gold upon the floor\nA door of light, a hidden door\nThe thicket parts, the air is thin\nThe spirit wakes from deep within\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[bridge]\nSpeak the name. Break the seal.\nMake the unseen vision real.\n\n[solo]\n\n[chorus]\nLight of the moon, lead me through\nInto the night, into the true\nA secret path in the ancient wood\nWhere the old gods stood\n\n[outro]\nThe moon remains...\nThe path is mine...",
         "instrumental": false,
         "targetSec": 120,
-        "durationSec": 300,
-        "seed": "4698559761364097",
-        "ditFile": "minimax_music3_dit_fp16.safetensors",
-        "tiledDecode": true,
-        "steps": 40,
-        "cfg": 1.7,
-        "encodeCfg": 1.7,
-        "topK": 50,
-        "quality": "V0",
         "vocalPref": "male",
         "genreHint": "Symphonic metal with a heavy folk-horror influence",
-        "language": "English"
+        "language": "English",
+        "durationSec": 500,
+        "checkpoint": "yue2_3b_int8_convrot.safetensors",
+        "steps": 32,
+        "cfg": 1,
+        "sampler": "dpm_2",
+        "scheduler": "sgm_uniform",
+        "planMode": "full",
+        "quality": "V0",
+        "seed": "123456789"
       },
-      "actualSec": 191.56,
+      "actualSec": 307.76,
       "hitCeiling": false,
       "photo": {
         "file": "moonlit-forest.jpg",
@@ -34,31 +34,31 @@
         }
       },
       "audio": "where-the-old-gods-stood.mp3",
-      "codes": "where-the-old-gods-stood.codes.bin"
+      "abc": "X:1\nT:\nM:2/4\nL:1/32\nQ:1/4=70\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:Dm\n% intro\nV: Vocal\nz12\"Dm\"z4|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nZ|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd16|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd16|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C/D\"z8|\nV: Ins\nd16|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C/D\"z8|\nV: Ins\nd16|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C\"z8|\nV: Ins\nd16|d4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|\nV: Vocal\n\"Dm\"z16|\nV: Ins\nd16|\n% verse\nV: Vocal\n\"Dm\"z6A,2D4E2F2-|\"Dm\"F4G4E4C2D2|\"Dm\"D8z8|\"Dm\"z16|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"z6A,2D4E2F2-|\"Bb\"F4G4\"C\"E4C4|\"Dm\"A,8z8|\"Dm\"z16|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"z6A,2D4E2F2-|\"Dm\"F4G2E6C2D2|\"Bb\"D8z8|\"Bb\"z16|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"z6G,2B,4C2D2-|\"Gm\"D2F6\"C\"E4C2D2|\"Dm\"D8z8|\"Dm\"z16|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"z6D2d2d4d2-|\"Bb\"d4e2f4g6|\"Dm\"d8z8|\"Dm\"z16|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"z6d2d4d2d2-|\"Bb\"d4e4f4g4|\"A\"e16-|\"A\"e16|\nV: Ins\nZ4|\n% chorus\nV: Vocal\n\"A\"z8z8|f8e4c4|\"Dm\"d16|\"Dm\"z8\"C\"e4c4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"d16|\"Bb\"z4d4\"C\"e4c4|\"F\"A12z4|\"F\"z4A4c4A2G2|\nV: Ins\nZ4|\nV: Vocal\n\"C\"G16|\"C\"z4f4e4c2d2|\"Dm\"d8z4d2d2|\"Dm\"a8\"C\"g8|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"f2e2d8z4|\"Bb\"z8d4e4|\"Gm\"f16|\"C\"e16|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d16-|\"Dm\"d16|\"Dm\"z8\"C\"z8|\"Dm\"z16|\nV: Ins\nZ2|f4g4e4c4|d16|\n% verse\nV: Vocal\n\"Dm\"z8D4E2F2-|\"Dm\"F4G2E6C2D2|\"Dm\"D8z8|\"Dm\"z16|\nV: Ins\nz6D2z8|Z|z8F4E2F2|G4F4E4C4|\nV: Vocal\n\"Bb\"z8D4E2F2-|\"Bb\"F4G4\"C\"E2C6|\"Dm\"A,8z8|\"Dm\"z16|\nV: Ins\nD6A,2z8|Z|z8F4E2F2|G4F4E4C4|\nV: Vocal\n\"Dm\"z6A,2D2E4F2-|\"Dm\"F4G2E6C4|\"Bb\"D8z8|\"Bb\"z16|\nV: Ins\nD6z8z2|Z|z8F4E2F2|G4F4E4C4|\nV: Vocal\n\"Gm\"z6G,2B,2C4D2-|\"Gm\"D4F4\"C\"E4C2D2|\"Dm\"D8z8|\"Dm\"f8e4c2d2|\nV: Ins\nD6z8z2|Z3|\n% chorus\nV: Vocal\n\"Dm\"d16|\"Dm\"z8\"C\"e4c2d2|\"Bb\"d16|\"Bb\"z4d4\"C\"e4c4|\nV: Ins\nZ4|\nV: Vocal\n\"F\"A12z4|\"F\"z4A4c4A2G2|\"C\"G16|\"C\"z4f4e4c2d2|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d8z4d2d2|\"Dm\"a8\"C\"g8|\"Bb\"f2e2d8z4|\"Bb\"z8d4e4|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"f16|\"C\"e16|\"Dm\"d16-|\"Dm\"d16|\nV: Ins\nZ4|\n% interlude\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd8f4f4|z8f4f4|d8f4f4|f8f8|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd8d4f4|f4f4f8|z8a4a4|a8f8|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nd8d8-|d8d6A2|c16-|c8d6A2|\nV: Vocal\n\"F\"z16|\"F\"z16|\"C\"z16|\"C\"z16|\nV: Ins\nF16|z4D2F2G2A2G2F2|E16|z4C2C2C2C2C2C2|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z16|\nV: Ins\nD8A8|G8F8|D8A8|G8F8|\nV: Vocal\n\"Gm\"z16|\"Gm\"z16|\"A\"z16|\"A\"f8e4c4|\nV: Ins\nG2F2G2F2G2F2G2F2|G2F2G2F2G2F2G2F2|A4z12|Z|\n% chorus\nV: Vocal\n\"Dm\"d16|\"Dm\"z8\"C\"e4c4|\"Bb\"d16|\"Bb\"z4d4\"C\"e4c4|\nV: Ins\nZ4|\nV: Vocal\n\"F\"A16|\"F\"z4A4c4A2G2|\"C\"G16|\"C\"z4f4e4c2d2|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d8z4d2d2|\"Dm\"a8\"C\"g8|\"Bb\"f2e2d12|\"Bb\"z8d4e4|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"f16|\"C\"e16|\nV: Ins\nZ2|\n% interlude\nV: Vocal\n\"Dm\"d16-|\"Dm\"d16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nZ2|f4g4e4c4|d12A,4|\nV: Vocal\n\"Dm\"D12E4|\"Dm\"F8z8|\"Dm\"z12C4|\"Dm\"F8E8|\nV: Ins\nZ|z8a4d2e2|f4g4e4z4|Z|\nV: Vocal\n\"Dm\"D16-|\"Dm\"D16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nZ2|f4g4e4c4|d16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|d16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|d16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|d16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nd4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|d16|\nV: Vocal\n\"Dm\"z16|\nV: Ins\nZ|\n"
     },
     {
       "id": "e0fce7dcccc4489bb7e0deb9567086e0",
       "spec": {
-        "title": "The Skeleton of the Sky",
+        "title": "Iron Ghost",
         "idea": "",
-        "caption": "Global Metadata: Dark Folk with a heavy cinematic and medieval influence. Tempo is a slow, deliberate 65 bpm. Key is B minor. The emotional arc begins with a sense of eerie, frozen anticipation and builds into a sweeping, tragic majesty before receding into a hollow, haunting silence. Listening scenario: A desolate, overgrown ruin at twilight. The production profile features a wide, atmospheric soundstage with a deep, resonant low-end and a bright, crystalline high-end to capture the sharp textures of the steel.\n\nVocal Details: Female lead, a deep and resonant baritone with a slight gravelly texture, evocative of a medieval bard. The delivery is intimate and hushed in the verses, moving into a powerful, operatic belt during the chorus. Backing vocals include low-register male humming and ethereal, distant choral textures that provide a sense of ancient scale. Subtle reverb creates a cathedral-like space for the voice.\n\nArrangement: Intro: A low, vibrating drone synth is layered with a mourning, weeping cello to establish a chilling, medieval atmosphere. Verse: A sparse, finger-picked acoustic guitar provides a rhythmic pulse, accompanied by a muffled, heartbeat-like percussion that mimics a slow pulse. Pre-Chorus: A haunting woodwind melody (reminiscent of an oboe) enters, joined by swelling, low-register strings that build a sense of impending movement. Chorus: A massive orchestral explosion occurs, featuring heavy, distorted cellos, a deep cinematic drum hit on every downbeat, and a soaring, tragic string section; the mood shifts to one of epic, tragic grandeur. Verse: Instrumentation thins back to the acoustic guitar and a subtle, rhythmic mechanical clicking sound, creating a sense of industrial decay. Chorus: Similar to the first, but with more prominent string layers and a fuller choral backing to increase the emotional weight. Bridge: The music slows significantly, focusing on a grinding stone-like texture and a rhythmic, chanted vocal style that feels like an ancient incantation. Solo: A weeping, high-register violin plays a tragic, soaring melody over a dark, driving beat that maintains the momentum. Chorus: A final, climactic peak with full orchestral weight, featuring a powerful choral finish that reaches a peak before falling away. Outro: The heavy instruments cut out suddenly, leaving only a single, decaying cello note and the ambient sound of a cold wind blowing through iron.",
-        "lyrics": "[intro]\n\n[verse]\nIron ribs against the gray\nWaiting for the break of day\nPillars of jade, deep and cold\nWatching the secrets of the old\nThe pond is glass, a mirror's face\nHolding the ghosts of a hollow place\n\n[pre-chorus]\nThe wind is a whisper, a dying breath\nA dance of life, a shadow of death\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[verse]\nVeins of gold and blood-red lines\nTwisting through the ancient pines\nThe buds are waking, the winter's done\nBut the beast remains, beneath the sun\nSilence reigns in the empty hall\nWaiting for the summer's call\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[bridge]\nThe gears are frozen, the heart is still\nLocked in a cage of iron will\nWait for the fall\nWait for the rise\n\n[solo]\n\n[chorus]\nRise, oh titan of the steel\nBroken spine that will never feel\nSpinning in the sun, a crown of fire\nA monument to a lost desire\nThe skeleton waits, the sky is wide\nNowhere for the soul to hide\n\n[outro]\nStill it stands\nStill it waits\nMm...",
+        "caption": "Global Metadata: Symphonic Folk-Metal with a heavy medieval and tragic cinematic influence. Tempo is a slow, lumbering 72 bpm. Key is G minor. The emotional arc moves from a cold, observant stillness to a soaring, tragic lament of lost glory, finally ending in a hollow, ghostly fade. Listening scenario: A desolate, sun-drenched ruin at the edge of a lake. The production profile features a wide, majestic soundstage with deep, resonant low-end, bright metallic high-end, and a rich, earthy texture.\n\nVocal Details: Female lead, a dramatic and expressive soprano with a slight operatic weight. Her delivery is hushed and narrative in the verses, transitioning into a powerful, weeping belt during the chorus. Backing vocals consist of a haunting, ethereal female choir and low-register male humming that creates a sense of scale. Subtle hall reverb and long, shimmering delays are used to emphasize the sense of vast, empty space.\n\nArrangement: Intro: A low, droning cello and a distant, lonely flute establish a freezing, medieval atmosphere. Verse: A finger-picked acoustic lute provides a rhythmic pulse, accompanied by a muffled, heartbeat-like frame drum; the mood is observant and still. Pre-Chorus: Swelling, low-register strings and a sharp, icy piano melody begin to build tension. Chorus: A massive orchestral explosion occurs, featuring heavy, distorted guitars, soaring violins, and a full choir; the mood shifts to one of tragic, epic grandeur. Verse: The heavy elements drop out, leaving only the lute and a weeping cello to create a sense of isolation. Bridge: The music slows significantly, focusing on a grinding, industrial texture and a rhythmic, chanted vocal style that feels like a mourning incantation. Solo: A weeping, high-register violin plays a tragic, soaring melody over a driving, heavy metal riff. Chorus: A final, climactic peak with full orchestral weight and brass, reaching a peak of tragic majesty. Outro: The heavy instruments cut out, leaving only a single, decaying cello note and the sound of wind through metal girders.",
+        "lyrics": "[intro]\n[verse]\nOrange steel against the blue\nA titan born, a dream untrue\nTeal pillars stand like frozen spears\nAbove the lake where silence nears\nThe budding trees begin to wake\nWhile shadows dance upon the lake\n[pre-chorus]\nThe monster sleeps in midday heat\nWaiting for the crowd to meet\n[chorus]\nOh, dragon of the rusted spine\nOnce you soared, once you were divine\nNow the wind is your only cry\nUnderneath a vacant sky\nRise from the dust, oh iron ghost\nOn the shore of a lonely coast\n[verse]\nNo laughter rings, no screams of joy\nJust the rust that time did destroy\nA skeleton of loops and turns\nWhere the fire of summer burns\nThe water reflects a hollow crown\nAs the sun beats the kingdom down\n[chorus]\nOh, dragon of the rusted spine\nOnce you soared, once you were divine\nNow the wind is your only cry\nUnderneath a vacant sky\nRise from the dust, oh iron ghost\nOn the shore of a lonely coast\n[bridge]\nThe gears are still\nThe heart is cold\nA story of steel\nLeft untold\n[solo]\n[chorus]\nOh, dragon of the rusted spine\nOnce you soared, once you were divine\nNow the wind is your only cry\nUnderneath a vacant sky\nRise from the dust, oh iron ghost\nOn the shore of a lonely coast\n[outro]\nStill you wait...\nStill you sleep...\nGhost of the gold...\nMmm...",
         "instrumental": false,
         "targetSec": 120,
-        "durationSec": 300,
-        "seed": "6467562359943454",
-        "ditFile": "minimax_music3_dit_fp16.safetensors",
-        "tiledDecode": true,
-        "steps": 40,
-        "cfg": 1.7,
-        "encodeCfg": 1.7,
-        "topK": 50,
-        "quality": "V0",
-        "vocalPref": "male",
+        "vocalPref": "female",
         "genreHint": "An abandoned forgotten roller coaster, reimagined as a hauntingly beautiful dark medieval tale",
-        "language": "English"
+        "language": "English",
+        "durationSec": 500,
+        "checkpoint": "yue2_3b_int8_convrot.safetensors",
+        "steps": 32,
+        "cfg": 1,
+        "sampler": "dpm_2",
+        "scheduler": "sgm_uniform",
+        "planMode": "full",
+        "quality": "V0",
+        "seed": "2726835652704063"
       },
-      "actualSec": 220.44,
+      "actualSec": 292.32,
       "hitCeiling": false,
       "photo": {
         "file": "roller-coaster.jpg",
@@ -68,8 +68,8 @@
           "source": "photo"
         }
       },
-      "audio": "the-skeleton-of-the-sky.mp3",
-      "codes": "the-skeleton-of-the-sky.codes.bin"
+      "audio": "iron-ghost.mp3",
+      "abc": "X:1\nT:\nM:2/4\nL:1/16\nQ:1/4=72\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:Dm\n% intro\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nZ|z2d4a2-|a8-|a2g2b4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na2g2f2e2|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|A8-|A4z4|Z|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nZ|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2a2a3d|\"Dm\"d2a2a4|\"Dm\"z6zd|\"Dm\"d2a2a3d|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d2c2d4|\"Dm\"z6d2|\"Bbmaj7\"da3a2d2|\"Bbmaj7\"d2a2a3d|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"d2a2a2d2|\"Gm\"d2c2d3d|\"Bb\"da3a3d|\"Bb\"d2a2a2zd|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"da3a3d|\"Gm\"d2c2d4|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nZ2|d4a4-|a4z2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z6zd|\"Bb\"d2a2a3d|\"Bb\"d2a2a2z2|\nV: Ins\nb4a2g2|f2e2d3z|Z2|\nV: Vocal\n\"Gm\"d2a2a3d|\"Gm\"d2c2d4-|\"Dm\"d8-|\"Dm\"d4z4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nZ2|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2gg|\"C\"g2f2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"g2f2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d'4a3c'|\"Dm\"b4a4|\"C\"g4b4|\"C\"a4d2d2|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"f8|\"Bb\"z2ddd2c2|\"Gm\"d8-|\"Gm\"d8|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z6d2|\nV: Ins\nZ2|\n% verse\nV: Vocal\n\"Dm\"d2a2a2d2|\"Dm\"d2a2a4|\"Dm\"z8|\"Dm\"d2a2a2dd-|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"dc2dd4|\"Dm\"z6zd|\"Bb\"da3a2d2|\"Bb\"d2a2a4|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"d2a2a2d2|\"Gm\"dc3d3d|\"Bb\"dda2a3d|\"Bb\"da3a4|\nV: Ins\nZ4|\nV: Vocal\n\"Gm\"d2a2a2dd|\"Gm\"d2c2ddz2|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nZ2|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d'4a3c'|\"Dm\"b4a4|\"C\"g4b4|\"C\"a4d2d2|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"f8|\"Bb\"z2ddd2c2|\"Gm\"d8-|\"Gm\"d8|\nV: Ins\nZ4|\n% interlude\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nD2D2D2D2|D2D2D2D2|D2D2D2D2|D2D2D2D2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nD2D2D2D2|D2D2D2D2|F2A2d4|d4d4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nd6cd|e4f4|e6de|f4g4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\na6ga|b4a2g2|f2e2d2c2|A2G2F2E2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD6CD|E4F4|E6DE|F4G4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA6GA|B4A2G2|A2G2F2E2|D2C2A,2G,2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nD,8-|D,8|Z2|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d'4a3c'|\"Dm\"b4a4|\"C\"g4b4|\"C\"a4d2d2|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"f8|\"Bb\"z2ddd2c2|\"Gm\"d8-|\"Gm\"d8|\nV: Ins\nZ4|\n% interlude\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nd2d2d2d2|d2d2d2d2|d2d2d2d2|d2d2d2d2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nd2d2d2d2|d2d2d2d2|Z|d4a4-|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na4z2g2|b4a2g2|f2e2d4|a8-|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na4z2g2|b4a2g2|f2e2d4|d4a4-|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na4z2g2|b4a2g2|f2e2d4|a8-|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na4z2g2|b4a2g2|f2e2d4|Z|\n"
     },
     {
       "id": "f6e4e96e3a404c05a1935235d503ef8a",
@@ -80,20 +80,20 @@
         "lyrics": "[intro]\n\n[verse]\nIn the hollow of the night\nOne small spark remains of light\nA face I used to know\nDeep within the winter snow\nYour name is all I keep\nBefore I fall to sleep\n\n[pre-chorus]\nThe walls are closing in\nWhere does the end begin?\n\n[chorus]\nOne spark in the endless black\nThe only path I lead back\nA flicker in the freezing gray\nBefore the memory fades away\n\n[verse]\nThe room is cold and wide,\nWith nowhere left to hide\nI reach for hands of old\nIn shadows deep and cold\nA single thought, a tiny flame\nWhispering your secret name\n\n[bridge]\nIs it real?\nOr just a dream?\nA ghost of what has been\n\n[solo]\n\n[chorus]\nOne spark in the endless black\nThe only path I lead back\nA flicker in the freezing gray\nBefore the memory fades away\n\n[outro]\nStill I see you...\nA fading light...",
         "instrumental": false,
         "targetSec": 120,
-        "durationSec": 300,
-        "seed": "2224802899613662",
-        "ditFile": "minimax_music3_dit_fp16.safetensors",
-        "tiledDecode": true,
-        "steps": 40,
-        "cfg": 1.7,
-        "encodeCfg": 1.7,
-        "topK": 50,
-        "quality": "V0",
         "vocalPref": "male",
         "genreHint": "a tragic medieval ballad whispered from a silent void",
-        "language": "English"
+        "language": "English",
+        "durationSec": 500,
+        "checkpoint": "yue2_3b_int8_convrot.safetensors",
+        "steps": 32,
+        "cfg": 1,
+        "sampler": "dpm_2",
+        "scheduler": "sgm_uniform",
+        "planMode": "full",
+        "quality": "V0",
+        "seed": "3141592653589"
       },
-      "actualSec": 231.08,
+      "actualSec": 196,
       "hitCeiling": false,
       "photo": {
         "file": "spark.png",
@@ -104,7 +104,7 @@
         }
       },
       "audio": "the-last-ember.mp3",
-      "codes": "the-last-ember.codes.bin"
+      "abc": "X:1\nT:\nM:4/4\nL:1/32\nQ:1/4=75\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:D#m\n% intro\nV: Vocal\nz24z4\"D#m\"z4|\"D#m\"z32|\"B\"z32|\"D#m\"z32|\nV: Ins\nZ|D,4A,4F4A,4E4A,4C4A,4|D12d4d'16|D,4A,4F4A,4E4A,4C4A,4|\nV: Vocal\n\"B\"z32|\nV: Ins\nD32|\n% verse\nV: Vocal\n\"D#m\"z12A2A2A2G6G6F2|\"B\"F8z24|\"D#m\"z8A4A4A6G2G6F2|\"B\"F8z6D2D4E4F6G2|\nV: Ins\nF12z16z4|Z3|\nV: Vocal\n\"F#\"A8z4A2A2A4B2A4G6|\"C#\"G8z6C2A4G2G4F2F4|\"B\"D8z6D2A4G4G8|\"D#m\"z4F4D8z16|\nV: Ins\nZ4|\nV: Vocal\n\"B\"z12z2D2D4E2F6A4|\"F#\"A8z24|\"B\"z12D4D4E2F6A4|\"A#\"A32|\nV: Ins\nZ4|\nV: Vocal\n\"A#\"z8A8f8e6A2|\nV: Ins\nZ|\n% chorus\nV: Vocal\n\"D#m\"A8G8A8z8|\"D#m\"z12A4f4e4\"D#m7/C#\"e4A4|\"Bmaj7\"A8G8A8z8|\"Bmaj7\"z12A4f4e4e4A4|\nV: Ins\nZ4|\nV: Vocal\n\"F#\"A8G8A8z8|\"F#\"z12A4B6A2A4G4|\"C#\"G8F8G16|\"C#\"z32|\nV: Ins\nZ3|e16f8e8|\n% verse\nV: Vocal\n\"D#m\"z12z2A2A4G4G6F2|\"B\"F8z24|\"D#m\"z12z2A2A4G4G4F2F2-|\"B\"F6z8D2D4E2F6G2A2-|\nV: Ins\nd12-d2z16z2|Z3|\nV: Vocal\n\"F#\"A6z8A2A2B4A4G6|\"C#\"G6F2G2F4A6G2G4F2F4|\"B\"D8z8A4G2G4F6|\"D#m\"G4F8D8z12|\nV: Ins\nZ3|z16z4A4d4e4|\nV: Vocal\n\"B\"z16z4D4F4A4-|\"F#\"A8z24|\"B\"z16z4D4D4F2A2|\"F#\"A2z24z6|\nV: Ins\nf16z16|z16z4A4d4e4|f16z16|Z|\nV: Vocal\n\"B\"z12z2D2D4E2F6A4-|\"A#m\"A4A24-A4-|\"A#m\"A16-A4z12|\nV: Ins\nZ3|\n% interlude\nV: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z32|\nV: Ins\nF4A4F4A,4E8C8|D8z2A,2D2E2F6E6C4|D8F4A,4E8C8|D16z4D2E2F2G2A2B2|\nV: Vocal\n\"F#\"z32|\"C#\"z32|\"B\"z32|\"D#m\"z32|\nV: Ins\nA16A6G6F4|G16G6F6E4|D16z4D4E4C4|D32|\nV: Vocal\n\"D#m\"z8A8f8e6A2|\nV: Ins\nZ|\n% chorus\nV: Vocal\n\"D#m\"A8G8A8z8|\"D#m\"z12A4f4e4\"D#m7/C#\"e4A4|\"Bmaj7\"A8G8A8z8|\"Bmaj7\"z12A4f4e4e4A4|\nV: Ins\nZ4|\nV: Vocal\n\"F#\"A8G8A8z8|\"F#\"z12A4B6A2A4G4|\"C#\"G8F8G16|\"C#\"z16A4G2G6F4|\nV: Ins\nZ4|\n% outro\nV: Vocal\n\"D#m\"D8z24|\"Bmaj7\"z16z4A,4F4E4|\"D#m\"D8z24|\"Bmaj7\"z32|\nV: Ins\nz8f4A4e4A4c4A4|d16z16|z8f4A4e4A4c4A4|d32|\n"
     }
   ]
 }

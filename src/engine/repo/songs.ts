@@ -1,8 +1,8 @@
 import type { Db } from '../ports';
 import { newId } from '../ports';
-import type { Song, SongSpec, SongStatus } from '../domain/types';
+import { RENDER_DEFAULTS, YUE2_CHECKPOINT, type Song, type SongSpec, type SongStatus } from '../domain/types';
 
-/** What the encoder reported: natural end (actualSec) or ran into the duration cap. */
+/** What the composer reported: natural end (actualSec) and/or ran into the duration cap. */
 export interface ComposedLength {
   actualSec?: number;
   hitCeiling: boolean;
@@ -20,20 +20,19 @@ interface Row {
   error: string | null;
   parent_id: string | null;
   spec_json: string;
-  codes_path: string | null;
-  prefix_song_id: string | null;
-  prefix_frames: number | null;
+  plan_abc: string | null;
 }
 
-/** Render instruction: teacher-force `songId`'s saved composition for `frames` frames (undefined = all). */
-export interface RenderPrefix {
-  songId: string;
-  frames?: number;
-}
-
-/** Rows written before the target/cap split only have durationSec (which was the cap). */
+/** Fills spec fields a stored row may predate (e.g. the bundled examples' manifest). */
 function normalizeSpec(spec: SongSpec): SongSpec {
-  return spec.targetSec == null ? { ...spec, targetSec: spec.durationSec } : spec;
+  return {
+    ...spec,
+    targetSec: spec.targetSec ?? spec.durationSec,
+    checkpoint: spec.checkpoint ?? YUE2_CHECKPOINT,
+    sampler: spec.sampler ?? RENDER_DEFAULTS.sampler,
+    scheduler: spec.scheduler ?? RENDER_DEFAULTS.scheduler,
+    planMode: spec.planMode ?? RENDER_DEFAULTS.planMode,
+  };
 }
 
 function rowToSong(r: Row): Song {
@@ -49,26 +48,25 @@ function rowToSong(r: Row): Song {
     comfyPromptId: r.comfy_prompt_id ?? undefined,
     error: r.error ?? undefined,
     parentId: r.parent_id ?? undefined,
-    codesPath: r.codes_path ?? undefined,
-    prefixSongId: r.prefix_song_id ?? undefined,
-    prefixFrames: r.prefix_frames ?? undefined,
+    planAbc: r.plan_abc ?? undefined,
   };
 }
 
 export class SongRepo {
   constructor(private readonly db: Db) {}
 
-  async create(spec: SongSpec, now: number, parentId?: string, status: SongStatus = 'queued', prefix?: RenderPrefix): Promise<Song> {
+  // `dit_file` / `tiled_decode` are the original song table's columns: the
+  // checkpoint name goes in dit_file, tiled_decode is unused (0).
+  async create(spec: SongSpec, now: number, parentId?: string, status: SongStatus = 'queued'): Promise<Song> {
     const id = newId();
     await this.db.execute(
       `INSERT INTO song (id, created_at, title, idea_text, photo_asset_id, caption, lyrics, instrumental, duration_sec,
-         seed, dit_file, tiled_decode, steps, cfg, format, quality, status, parent_id, spec_json, prefix_song_id, prefix_frames)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mp3', ?, ?, ?, ?, ?, ?)`,
+         seed, dit_file, tiled_decode, steps, cfg, format, quality, status, parent_id, spec_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'mp3', ?, ?, ?, ?)`,
       [
         id, now, spec.title, spec.idea || null, spec.photo?.id ?? null, spec.caption, spec.lyrics,
-        spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.ditFile, spec.tiledDecode ? 1 : 0,
+        spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.checkpoint,
         spec.steps, spec.cfg, spec.quality, status, parentId ?? null, JSON.stringify(spec),
-        prefix?.songId ?? null, prefix?.frames ?? null,
       ],
     );
     return (await this.byId(id))!;
@@ -84,7 +82,7 @@ export class SongRepo {
     spec: SongSpec;
     createdAt: number;
     outputPath: string;
-    codesPath?: string;
+    planAbc?: string;
     actualSec?: number;
     hitCeiling?: boolean;
   }): Promise<Song> {
@@ -92,13 +90,13 @@ export class SongRepo {
     await this.db.execute(
       `INSERT INTO song (id, created_at, title, idea_text, photo_asset_id, caption, lyrics, instrumental, duration_sec,
          seed, dit_file, tiled_decode, steps, cfg, format, quality, status, spec_json,
-         output_path, codes_path, actual_sec, hit_ceiling)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mp3', ?, 'done', ?, ?, ?, ?, ?)`,
+         output_path, plan_abc, actual_sec, hit_ceiling)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'mp3', ?, 'done', ?, ?, ?, ?, ?)`,
       [
         id, input.createdAt, spec.title, spec.idea || null, spec.photo?.id ?? null, spec.caption, spec.lyrics,
-        spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.ditFile, spec.tiledDecode ? 1 : 0,
+        spec.instrumental ? 1 : 0, spec.durationSec, spec.seed, spec.checkpoint,
         spec.steps, spec.cfg, spec.quality, JSON.stringify(spec),
-        input.outputPath, input.codesPath ?? null, input.actualSec ?? null,
+        input.outputPath, input.planAbc ?? null, input.actualSec ?? null,
         input.hitCeiling == null ? null : input.hitCeiling ? 1 : 0,
       ],
     );
@@ -129,10 +127,10 @@ export class SongRepo {
     await this.db.execute(`UPDATE song SET comfy_prompt_id = ? WHERE id = ?`, [promptId, id]);
   }
 
-  async setOutput(id: string, outputPath: string, renderMs?: number, composed?: ComposedLength, codesPath?: string): Promise<void> {
+  async setOutput(id: string, outputPath: string, renderMs?: number, composed?: ComposedLength, planAbc?: string): Promise<void> {
     await this.db.execute(
-      `UPDATE song SET output_path = ?, render_ms = ?, actual_sec = ?, hit_ceiling = ?, codes_path = ?, status = 'done', error = NULL WHERE id = ?`,
-      [outputPath, renderMs ?? null, composed?.actualSec ?? null, composed ? (composed.hitCeiling ? 1 : 0) : null, codesPath ?? null, id],
+      `UPDATE song SET output_path = ?, render_ms = ?, actual_sec = ?, hit_ceiling = ?, plan_abc = ?, status = 'done', error = NULL WHERE id = ?`,
+      [outputPath, renderMs ?? null, composed?.actualSec ?? null, composed ? (composed.hitCeiling ? 1 : 0) : null, planAbc ?? null, id],
     );
   }
 

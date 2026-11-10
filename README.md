@@ -1,4 +1,4 @@
-# Stillsong
+# Stillsong 2
 
 **Draw a picture or take a photo. Create a song that tells its story.**
 
@@ -6,7 +6,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)
 
-Stillsong is a Windows desktop app that turns a picture into an original song.
+Stillsong 2 is a Windows desktop app that turns a picture into an original song.
 A songwriter looks at your picture and writes lyrics about what it sees; a
 composer performs them as finished music. The result plays in a full-screen
 listening sanctuary where the picture fills the room and the lyrics drift over it.
@@ -15,6 +15,17 @@ Both the songwriter and the composer are open models, and both of them live on
 your own PC. Stillsong installs like any other Windows program, fetches what
 it needs during setup, and then never connects to the internet again. Your pictures
 and songs stay with you.
+
+### Stillsong 2 and the original Stillsong
+
+Stillsong 2 uses a smaller, faster composer, [YuE2](https://github.com/multimodal-art-projection/YuE),
+that usually makes a good song on the first try and follows the caption more
+predictably. The original Stillsong (on the [`v1` branch](https://github.com/logiscape/stillsong/tree/v1))
+uses the larger MiniMax Music 3, which can reach a wider variety of music and
+rewards patient remixing. They are separate apps that install side by side:
+each has its own songs, its own downloaded studio and its own uninstaller, and
+neither touches the other. Only one of them uses the graphics card at a time —
+Stillsong 2 waits for you to close the other before it starts its studio.
 
 <p align="center">
   <img src="docs/screenshots/create-song.png" alt="Stillsong's song creation screen, where you can either upload a photo or draw something in the sketchpad to create a song" width="800">
@@ -44,11 +55,12 @@ and your art always remains yours.
   caption and lyrics, and the composer records the song. A seven-stage status
   view keeps you company while it works.
 - **Listen.** The Sanctuary is a full-screen player: photo as the room, lyrics
-  as a drifting sheet, glass controls. Remixes and continuations of a song
-  are kept together as versions so you can audition takes side by side.
-- **Remix.** Edit the lyrics or caption and record a new version. When the
-  seed is kept, everything before your first edit is reproduced note for note
-  and the song only changes from there.
+  as a drifting sheet, glass controls. Remixes of a song are kept together as
+  versions so you can audition takes side by side.
+- **Remix.** Edit the lyrics or caption and record a new version. The composer
+  first writes a melody plan (a short score of notes and chords) and then
+  performs it; a remix can keep that melody while you change the words, the
+  style or the seed. Kept seed, kept melody and no edits is the very same take.
 - **Save.** Export an MP3 to listen or share, with an ID3 tag providing trust
   and transparency.
 
@@ -66,7 +78,7 @@ open-source engine that Stillsong bundles and supervises for you:
 | Role | Model | Engine |
 |---|---|---|
 | Songwriter (looks at the photo, writes caption + lyrics) | [Gemma 4 12B](https://huggingface.co/ggml-org/gemma-4-12B-it-GGUF) | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) |
-| Composer (renders the music) | [MiniMax Music 3](https://huggingface.co/Comfy-Org/MiniMax-Music-3) | [ComfyUI](https://github.com/comfyanonymous/ComfyUI), headless |
+| Composer (writes the melody, performs the music) | [YuE2](https://huggingface.co/Comfy-Org/YuE2) (3B, int8) | [ComfyUI](https://github.com/comfyanonymous/ComfyUI), headless, core nodes only |
 
 Both engines are started as child processes bound to `127.0.0.1` only, tied
 to the app with a Windows Job Object so they can never outlive it, and never
@@ -82,19 +94,18 @@ fakes and no GPU.
 
 - Windows 10 or 11, 64-bit
 - An NVIDIA graphics card with at least 8 GB of VRAM
-  - 16 GB or more creates songs at full speed (a 20-second draft in roughly
-    25 seconds; a full song in a few minutes)
-  - 8 to 16 GB produces identical songs, several times slower. This tier was
-    measured under emulation on a 16 GB card (see
-    [docs/PATIENT-TIER-MEASUREMENT.md](docs/PATIENT-TIER-MEASUREMENT.md));
-    if it behaves differently on your card, please open an issue
+  - 16 GB or more creates songs at full speed (a four-minute song in about a
+    minute and a half on an RTX 5080, lyrics included)
+  - 8 to 16 GB should work more slowly, as ComfyUI streams the model in and out
+    of memory. Stillsong 2 has not been measured on such a card yet; if you
+    try one, please open an issue
 - A current NVIDIA driver: 580 or newer, or 615 or newer on RTX 20 and GTX 16
   cards (the first-run check tells you if yours needs an update)
 - 32 GB of system RAM recommended for the 8 to 16 GB tier. It is not required:
   Stillsong streams from disk when memory is tight, so leave Windows virtual
   memory enabled
 - About 40 GB of free disk space for the one-time component download (roughly
-  25 GB is downloaded). The setup wizard lets you put the components on
+  13 GB is downloaded). The setup wizard lets you put the components on
   another drive
 
 ## Installing
@@ -145,15 +156,14 @@ step-by-step packet-capture check, are in
 
 Every MP3 carries a small text tag written by the renderer: the complete
 recipe for the song. That is the caption and lyrics the songwriter wrote, the
-seed, the length cap and sampler settings, the model file names, and, for a
-song that continues an earlier take, the composition codes of the part being
-continued. With the same models, that recipe re-creates the audio exactly.
+melody plan, the seed, the length cap and sampler settings, and the model file
+name. With the same models, that recipe re-creates the audio exactly.
 
 It never contains the photo or drawing, or anything made from its pixels. It
 carries no title, no name and nothing about your computer. The caption and
 lyrics do describe the picture in words, so anyone with the file can read what
 the song is about. *Save a copy* adds one more tag, a comment reading
-"AI-generated music (MiniMax-Music3), created locally with Stillsong". If you
+"AI-generated music (YuE2), created locally with Stillsong 2". If you
 would rather share a song without its recipe, any tag editor can remove the
 `prompt` tag; keep the disclosure comment if you share publicly.
 
@@ -196,16 +206,15 @@ including the measured facts about the music model that the code depends on.
 ### Repository layout
 
 ```
-src/engine/        pure TypeScript core: domain, cowriter (LLM), comfy (graph + codes),
+src/engine/        pure TypeScript core: domain, cowriter (LLM), comfy (graph + progress),
                    orchestrator (pipeline, VRAM arbiter), repos; all I/O behind ports.ts
 src/adapters/      Tauri implementations of the engine ports
 src/state/         UI store
 src/ui/            React interface: screens, design-system components, vendored fonts
 src-tauri/         Rust shell: process supervisor, downloads, GPU detection, installer hooks
-comfy-overlay/     first-party ComfyUI custom node (composition capture and continuation)
 examples/          the three example songs a new library starts with (CC BY 4.0), bundled as a resource
 components.json    pinned manifest of everything first-run setup downloads, incl. the Python lock
-scripts/           dev ComfyUI launcher, overlay install/smoke tests, measurement tools,
+scripts/           dev ComfyUI launcher, measurement tools,
                    the Python lock generator and manifest checker
 docs/              offline verification, low-VRAM measurement report, Python package notices
 ```
@@ -253,8 +262,7 @@ A few principles the project holds to, so PRs that cross them will be
 discussed rather than merged:
 
 - No network activity after setup. No updater, no telemetry, no remote fonts.
-- Official ComfyUI nodes plus our own vendored overlay only; no third-party
-  custom nodes.
+- ComfyUI core nodes only; no custom nodes.
 - The engine stays pure and testable without a GPU.
 
 ## FAQ
@@ -263,13 +271,17 @@ discussed rather than merged:
 claim ownership of what you create.
 
 **Can I share them?** Yes. You can export your songs as MP3 files, and share them
-however you wish. Your content belongs to you.
+however you wish. YuE2's authors grant personal users, content creators and
+musicians permission to use and monetize what they make, with no fees or
+royalties; companies that want to use YuE2 commercially need a license from
+its authors (see [License](#license)). They ask, optionally, that you credit
+YuE2 or use #YuE2 when you share.
 
 **Does it work on AMD or Intel graphics, or on a laptop without a dedicated GPU?**
 Not today. Both engines are run with CUDA, and the first-run check requires an
 NVIDIA card with 8 GB or more.
 
-**Why is the download so large?** It is two full AI models (about 14 GB of
+**Why is the download so large?** It is two full AI models (about 11 GB of
 weights) plus their runtimes, including PyTorch with CUDA. Everything is
 fetched from the upstream projects directly, never re-hosted here.
 
@@ -287,18 +299,16 @@ with detailed and descriptive captions, but the caption provides a general
 direction and influence for the song. The model doesn't always follow the caption
 as precise instructions.
 
-**Refining or fixing part of a song** If you're happy with the general style and
-sound of a song but want to change a specific part, you can create a remix to
-edit the lyrics and choose "Keep original" to use the same seed. Stillsong will
-keep everything up to the segment that you changed, and recreate the song past
-that point. You can make a minor change, such as adding a comma or punctuation
-if you just want Stillsong to try a new take on that section.
+**Keeping the tune** If you like a song's melody but not every word, remix it
+with "Keep melody". The composer sings the same tune again with your edited
+lyrics or caption; with "Keep original" for the seed as well, the result stays
+closest to the first take, while "New seed" keeps the tune and lets the voices
+and instruments change. Remix → Advanced shows the melody plan itself, in ABC
+notation, if you want to edit the notes by hand.
 
-**Enhancing the sound quality of a song** By default, Stillsong uses a faster
-rendering method for new songs and remixes, so you can more quickly experiment
-with different variations of a song. These songs will show an "Enhance quality"
-button, which will keep the same melody and lyrics but enhance the quality to
-give instruments and vocals a crisper and clearer sound.
+**If a song stops before its ending** Every song gets the same generous length
+limit. A song that runs out of room is marked in the Song view; a remix with a
+few fewer lines usually lets it finish on its own.
 
 ## License
 
@@ -308,13 +318,15 @@ licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), with
 full notice texts in [THIRD-PARTY-LICENSES.txt](THIRD-PARTY-LICENSES.txt).
 
 Model weights are downloaded by the user from their upstream sources at first
-run and are governed by their own licenses: the MiniMax-Music3 Community
-License and, for Gemma 4, [Apache 2.0](https://ai.google.dev/gemma/apache_2).
+run and are governed by their own licenses: for YuE2, CC BY-NC 4.0 with its
+authors' additional creator permission (see
+[the YuE repository](https://github.com/multimodal-art-projection/YuE) and its
+`MODEL_LICENSE`), and for Gemma 4, [Apache 2.0](https://ai.google.dev/gemma/apache_2).
 
 The example songs, photos and sketch in [`examples/`](examples/) are
 © 2026 Logiscape LLC and released under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) rather than the
 GPL, so they can be reused as media (see [examples/LICENSE.md](examples/LICENSE.md)).
 
-Music composed locally by MiniMax-Music3. Lyrics by Gemma 4. Engines: ComfyUI
+Music composed locally by YuE2. Lyrics by Gemma 4. Engines: ComfyUI
 and llama.cpp. A [Logiscape](https://github.com/logiscape) project.

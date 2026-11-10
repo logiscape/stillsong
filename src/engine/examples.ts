@@ -1,9 +1,9 @@
-// Example songs. The repo's examples/ folder (three finished songs, their
-// photos and compositions, under CC BY 4.0 — see examples/LICENSE.md) ships
-// as a Tauri resource, and on the first boot that finds an empty library the
-// engine imports it through the ordinary repos: the photo lands in
-// library/photos with a freshly rendered thumbnail, the MP3 and codes in
-// library/songs, the song row as 'done' with a fixed, manifest-chosen id.
+// Example songs. The repo's examples/ folder (three finished songs and their
+// photos, under CC BY 4.0 — see examples/LICENSE.md) ships as a Tauri
+// resource, and on the first boot that finds an empty library the engine
+// imports it through the ordinary repos: the photo lands in library/photos
+// with a freshly rendered thumbnail, the MP3 in library/songs, the song row as
+// 'done' with a fixed, manifest-chosen id and the melody plan it performed.
 // Rows are created on the user's machine (never copied from a pre-built
 // database) because every path in the database is absolute.
 //
@@ -13,7 +13,7 @@
 // midway (the marker is only written on success) resumes without duplicates.
 
 import type { Clock, FileStore } from './ports';
-import { b64ToBytes } from './comfy/codes';
+import { b64ToBytes } from './base64';
 import type { PhotoAsset, SongSpec } from './domain/types';
 import type { PhotoRepo } from './repo/photos';
 import type { SongRepo } from './repo/songs';
@@ -40,8 +40,8 @@ export interface ExampleSong {
   photo: ExamplePhoto;
   /** MP3 file name inside the examples dir. */
   audio: string;
-  /** SSC1 composition file name inside the examples dir (enables exact continuations and same-seed edits). */
-  codes?: string;
+  /** The melody plan (ABC) the example performed, so "Keep melody" remixes work on it. */
+  abc?: string;
 }
 
 export interface ExamplesManifest {
@@ -89,13 +89,12 @@ export async function seedExamples(deps: SeedDeps): Promise<number> {
     const createdAt = now - i * 1000;
     const photo = await importExamplePhoto(ex.photo, dir, files, photos, createdAt);
     const outputPath = await files.importFile(joinPath(dir, ex.audio), `songs/${ex.id}.mp3`);
-    const codesPath = ex.codes ? await files.importFile(joinPath(dir, ex.codes), `songs/${ex.id}.codes.bin`) : undefined;
     await songs.insertFinished({
       id: ex.id,
       spec: { ...ex.spec, photo },
       createdAt,
       outputPath,
-      codesPath,
+      planAbc: ex.abc,
       actualSec: ex.actualSec,
       hitCeiling: ex.hitCeiling,
     });

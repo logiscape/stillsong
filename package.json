@@ -1,7 +1,7 @@
 {
-  "name": "stillsong",
+  "name": "stillsong2",
   "private": true,
-  "version": "1.1.0",
+  "version": "2.0.0",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:live": "cross-env STILLSONG_LIVE=1 NODE_OPTIONS=--experimental-sqlite vitest run --no-file-parallelism --testTimeout 900000 src/engine/__tests__/live.test.ts src/engine/__tests__/live-cowriter.test.ts",
+    "test:live": "cross-env STILLSONG2_LIVE=1 NODE_OPTIONS=--experimental-sqlite vitest run --no-file-parallelism --testTimeout 900000 src/engine/__tests__/live.test.ts src/engine/__tests__/live-cowriter.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "licenses": "node scripts/generate-third-party-licenses.mjs",
     "lock:python": "node scripts/lock-python.mjs",

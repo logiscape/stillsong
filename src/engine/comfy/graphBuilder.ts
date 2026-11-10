@@ -1,18 +1,20 @@
-// Builds the flat API-format Music 3 graph (port of the stock
-// audio_minimax_music_3.json template, subgraph unwrapped). Node ids are
+// Builds the flat API-format YuE2 graph (port of the stock
+// audio_yue2_text2music.json template, subgraph unwrapped). Node ids are
 // stable strings: the WS `executing {node}` / `progress {node}` events map
-// id -> phase label, so renaming an id silently degrades progress text.
+// id -> phase label, and harvest reads `plan_out` / `seconds_out` from
+// /history, so renaming an id silently degrades progress text or the harvest.
 
-import { MODEL_FILES, type SongSpec } from '../domain/types';
+import type { SongSpec } from '../domain/types';
 import { snapDuration } from '../domain/validate';
 import * as N from './nodes';
 import type { ApiGraph } from './nodes';
 
 export const NODE_PHASES: Record<string, string> = {
-  clip: 'Loading models',
-  unet: 'Loading models',
-  vae: 'Loading models',
-  encode: 'Composing (writing the song)',
+  ckpt: 'Loading models',
+  plan: 'Composing (writing the melody)',
+  plan_out: 'Composing (writing the melody)',
+  perform: 'Composing (writing the song)',
+  seconds_out: 'Composing (writing the song)',
   neg: 'Composing (writing the song)',
   latent: 'Composing (writing the song)',
   sample: 'Rendering audio',
@@ -20,56 +22,53 @@ export const NODE_PHASES: Record<string, string> = {
   save: 'Saving',
 };
 
-/**
- * Present only when the Stillsong overlay node is installed (probe
- * `ComfyClient.hasNode`). Every render then captures its composition codes;
- * a prefix teacher-forces the first N frames of a saved composition.
- */
-export interface StillsongGraphOpts {
-  /** Base64 SSC1 blob to teacher-force (omit for a free render). */
-  prefixCodesB64?: string;
-  /** Fixed KV capacity in frames (0/omit = size from the cap, upstream behavior). */
-  kvCapacityFrames?: number;
+/** History output ids the harvest reads (PreviewAny text). */
+export const PLAN_OUT = 'plan_out';
+export const SECONDS_OUT = 'seconds_out';
+
+/** Whether this spec writes a new melody plan in the graph (vs. performing a given one, or none). */
+export function writesPlan(spec: SongSpec): boolean {
+  return spec.planMode !== 'off' && !spec.abc?.trim();
 }
 
-export function buildGraph(spec: SongSpec, filenamePrefix: string, stillsong?: StillsongGraphOpts): { graph: ApiGraph } {
+export function buildGraph(spec: SongSpec, filenamePrefix: string): { graph: ApiGraph } {
+  // One seed drives the plan, the performance and the sampler (as in the template).
   const seed = Number(spec.seed);
-  const encodeInputs = {
-    clip: ['clip', 0] as N.Link,
-    caption: spec.caption,
-    lyrics: spec.instrumental && !spec.lyrics.trim() ? '' : spec.lyrics,
+  const mode = spec.planMode === 'melody' ? 'melody' : 'full';
+  const lyrics = spec.instrumental && !spec.lyrics.trim() ? '' : spec.lyrics;
+  const graph: ApiGraph = { ckpt: N.checkpointLoader(spec.checkpoint) };
+  let abc: string | N.Link = '';
+  if (writesPlan(spec)) {
+    graph.plan = N.yue2GenerateAbc({ clip: ['ckpt', 1], style: spec.caption, lyrics, seed, mode });
+    graph[PLAN_OUT] = N.previewAny(['plan', 0]);
+    abc = ['plan', 0];
+  } else if (spec.planMode !== 'off') {
+    abc = spec.abc ?? '';
+  }
+  graph.perform = N.yue2GenerateMusic({
+    clip: ['ckpt', 1],
+    style: spec.caption,
+    lyrics,
+    abc,
     seed,
+    mode,
     maxDuration: snapDuration(spec.durationSec),
-    cfgScale: spec.encodeCfg,
-    topK: spec.topK,
-  };
-  const graph: ApiGraph = {
-    unet: N.unetLoader(spec.ditFile),
-    clip: N.clipLoader(MODEL_FILES.textEncoder),
-    vae: N.vaeLoader(MODEL_FILES.vae),
-    // Node id stays 'encode' either way — NODE_PHASES and progress tracking
-    // key on the id, not the class.
-    encode: stillsong
-      ? N.stillsongMusic3TextEncode({
-          ...encodeInputs,
-          saveCodesPrefix: filenamePrefix,
-          prefixCodesB64: stillsong.prefixCodesB64,
-          kvCapacityFrames: stillsong.kvCapacityFrames,
-        })
-      : N.music3TextEncode(encodeInputs),
-    neg: N.conditioningZeroOut(['encode', 0]),
-    latent: N.emptyMusic3Latent(['encode', 1]),
-    sample: N.kSampler({
-      model: ['unet', 0],
-      positive: ['encode', 0],
-      negative: ['neg', 0],
-      latent: ['latent', 0],
-      seed,
-      steps: spec.steps,
-      cfg: spec.cfg,
-    }),
-    decode: spec.tiledDecode ? N.vaeDecodeAudioTiled(['sample', 0], ['vae', 0]) : N.vaeDecodeAudio(['sample', 0], ['vae', 0]),
-    save: N.saveAudioMp3(['decode', 0], filenamePrefix, spec.quality),
-  };
+  });
+  graph[SECONDS_OUT] = N.previewAny(['perform', 1]);
+  graph.neg = N.conditioningZeroOut(['perform', 0]);
+  graph.latent = N.emptyYue2Latent(['perform', 1]);
+  graph.sample = N.kSampler({
+    model: ['ckpt', 0],
+    positive: ['perform', 0],
+    negative: ['neg', 0],
+    latent: ['latent', 0],
+    seed,
+    steps: spec.steps,
+    cfg: spec.cfg,
+    sampler: spec.sampler,
+    scheduler: spec.scheduler,
+  });
+  graph.decode = N.vaeDecodeAudio(['sample', 0], ['ckpt', 2]);
+  graph.save = N.saveAudioMp3(['decode', 0], filenamePrefix, spec.quality);
   return { graph };
 }

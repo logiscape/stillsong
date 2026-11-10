@@ -11,7 +11,7 @@ name: First run
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
     paths:
       - components.json
       - src-tauri/src/manifest.rs
@@ -42,6 +42,6 @@ jobs:
       - name: Headless first run (runtime legs, offline Python sync)
         working-directory: src-tauri
         env:
-          STILLSONG_E2E_COMPONENTS: ${{ runner.temp }}\stillsong-components
-          STILLSONG_E2E_SKIP_MODELS: "1"
+          STILLSONG2_E2E_COMPONENTS: ${{ runner.temp }}\stillsong-components
+          STILLSONG2_E2E_SKIP_MODELS: "1"
         run: cargo test first_run_headless -- --nocapture

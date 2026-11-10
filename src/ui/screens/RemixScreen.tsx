@@ -1,15 +1,16 @@
 // Remix: the one deliberately technical surface. Edit the package (caption,
-// tagged lyrics, seed, advanced knobs) and render a new linked version of the
-// same photo's story. No length control — the cap derives from the lyrics.
+// tagged lyrics, seed, melody plan, advanced knobs) and render a new linked
+// version of the same photo's story. No length control: every song gets the
+// same cap (MAX_DURATION_SEC) and ends where the composer ends it.
 
 import React, { useMemo, useState } from 'react';
-import type { Mp3Quality, SongSpec } from '@engine/domain/types';
+import type { Mp3Quality, PlanMode, SongSpec } from '@engine/domain/types';
 import { randomSeed } from '@engine/domain/types';
 import { renderCap } from '@engine/domain/duration';
 import { lintSong } from '@engine/cowriter/linter';
 import { estimateSeconds, wordCount } from '@engine/cowriter/lyrics';
 import { validateSpec } from '@engine/domain/validate';
-import { enqueueRemix, getEngine, navigate, remixPrefix, remixSpec, thumbSrc, useAppState } from '@state/store';
+import { canKeepMelody, enqueueRemix, navigate, remixAbc, remixSpec, thumbSrc, useAppState } from '@state/store';
 import { fmtDuration } from '@ui/ds/format';
 import { Badge } from '@ui/ds/Badge';
 import { Button } from '@ui/ds/Button';
@@ -18,7 +19,6 @@ import { IconButton } from '@ui/ds/IconButton';
 import { LintList } from '@ui/ds/LintList';
 import { Panel } from '@ui/ds/Panel';
 import { SegmentedChoice } from '@ui/ds/SegmentedChoice';
-import { Switch } from '@ui/ds/Switch';
 import { TextField } from '@ui/ds/TextField';
 
 function TagLyrics({ value, onChange }: { value: string; onChange: (v: string) => void }): React.ReactElement {
@@ -69,6 +69,9 @@ export function RemixScreen(): React.ReactElement | null {
   const original = s.songs.find((x) => x.id === s.selectedSongId);
   const [spec, setSpec] = useState<SongSpec | null>(original ? remixSpec(original) : null);
   const [seedMode, setSeedMode] = useState<'keep' | 'new'>('keep');
+  const melodyAvailable = !!original && canKeepMelody(original);
+  const [melody, setMelody] = useState<'keep' | 'new'>(melodyAvailable ? 'keep' : 'new');
+  const [planText, setPlanText] = useState(original?.planAbc ?? '');
 
   if (!original || !spec) {
     navigate('sanctuary');
@@ -76,19 +79,21 @@ export function RemixScreen(): React.ReactElement | null {
   }
 
   const patch = (p: Partial<SongSpec>) => setSpec({ ...spec, ...p });
-  const ceiling = getEngine().capCeilingSec;
-  const cap = renderCap(spec.targetSec, spec.lyrics, ceiling);
-  const issues = lintSong({ ...spec, durationSec: cap });
-  const errors = validateSpec({ ...spec, durationSec: cap }).filter((i) => i.severity === 'error');
+  // The lint judges the lyrics against the co-writer's own length budget, as
+  // it did when they were written; the render itself always gets the fixed cap.
+  const issues = lintSong({ ...spec, durationSec: renderCap(spec.targetSec, spec.lyrics) });
+  const errors = validateSpec(spec).filter((i) => i.severity === 'error');
   const est = estimateSeconds(spec.lyrics);
+  const planOff = spec.planMode === 'off';
+  const planEdited = !planOff && planText.trim() !== '' && planText !== (original.planAbc ?? '');
+  // A different plan mode asks for a different kind of plan: write a new one.
+  const modeChanged = spec.planMode !== original.spec.planMode;
 
   const create = () => {
-    const keepSeed = seedMode === 'keep';
-    const seed = keepSeed ? original.spec.seed : randomSeed();
-    const finalSpec = { ...spec, seed, durationSec: cap };
-    void enqueueRemix(finalSpec, original.id, remixPrefix(original, finalSpec, keepSeed));
+    const seed = seedMode === 'keep' ? original.spec.seed : randomSeed();
+    const abc = planOff ? undefined : remixAbc(original, melody === 'keep' && !modeChanged, planEdited ? planText : undefined);
+    void enqueueRemix({ ...spec, seed, abc }, original.id);
   };
-  const keepsPerformance = seedMode === 'keep' && remixPrefix(original, spec, true) != null;
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 'var(--space-8) var(--gutter-screen) var(--space-9)' }}>
@@ -98,7 +103,7 @@ export function RemixScreen(): React.ReactElement | null {
           <span style={{ font: 'var(--ui-eyebrow)', letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', color: 'var(--brass-300)' }}>Remix</span>
           <h1 style={{ font: 'var(--display-md)', color: 'var(--ink-1)', margin: '6px 0 0', letterSpacing: 'var(--tracking-display)' }}>{original.spec.title}</h1>
         </div>
-        <Badge mono>renders up to {fmtDuration(cap)}</Badge>
+        <Badge mono>up to {fmtDuration(spec.durationSec)}</Badge>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) 320px', gap: 'var(--space-8)', alignItems: 'start' }}>
@@ -123,28 +128,50 @@ export function RemixScreen(): React.ReactElement | null {
             options={[{ value: 'keep', label: 'Keep original', icon: 'lock' }, { value: 'new', label: 'New seed', icon: 'dices' }]}
             style={{ maxWidth: 320 }}
           />
-          {seedMode === 'keep' && (
-            <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: -8 }}>
-              {keepsPerformance
-                ? 'Keeps the original performance up to your first lyric change, then re-composes from there.'
-                : 'A changed caption or opening (or a song without a saved composition) means the whole song is performed again — same seed, so it may still come out close.'}
+          {melodyAvailable && !planOff && !planEdited && !modeChanged && (
+            <>
+              <SegmentedChoice
+                label="Melody" value={melody} onChange={(v) => setMelody(v as 'keep' | 'new')}
+                options={[{ value: 'keep', label: 'Keep melody', icon: 'lock' }, { value: 'new', label: 'New melody', icon: 'dices' }]}
+                style={{ maxWidth: 320 }}
+              />
+              <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: -8 }}>
+                {melody === 'keep'
+                  ? seedMode === 'keep'
+                    ? 'Sings the original tune again. With nothing else changed it is the same take; your edits change how it is sung and played.'
+                    : 'Sings the original tune again with a new feel: voices and instruments can change.'
+                  : 'Writes a new melody for the song.'}
+              </span>
+            </>
+          )}
+          {planEdited && (
+            <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)' }}>
+              Your edited melody plan will be performed as written.
             </span>
           )}
           <Disclosure summary="Advanced">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)', maxWidth: 460 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)' }}>
               <NumField label="Steps" value={spec.steps} onChange={(v) => patch({ steps: v })} />
               <NumField label="Guidance" value={spec.cfg} onChange={(v) => patch({ cfg: v })} />
-              <NumField label="Encode guidance" value={spec.encodeCfg} onChange={(v) => patch({ encodeCfg: v })} />
-              <NumField label="Top K" value={spec.topK} onChange={(v) => patch({ topK: v })} />
               <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+                <SegmentedChoice
+                  label="Melody plan" value={spec.planMode}
+                  onChange={(v) => patch({ planMode: v as PlanMode })}
+                  options={[{ value: 'full', label: 'Melody + chords' }, { value: 'melody', label: 'Melody only' }, { value: 'off', label: 'None' }]}
+                  style={{ maxWidth: 420 }}
+                />
+                {!planOff && (
+                  <TextField
+                    label={original.planAbc ? 'Melody plan (ABC notation) — edit to change the tune' : 'Melody plan (ABC notation) — leave empty to write a new one'}
+                    multiline mono rows={10} value={planText} onChange={setPlanText}
+                  />
+                )}
                 <SegmentedChoice
                   label="MP3 quality" value={spec.quality}
                   onChange={(v) => patch({ quality: v as Mp3Quality })}
                   options={['V0', '128k', '320k']}
                   style={{ maxWidth: 320 }}
                 />
-                <Switch checked={spec.tiledDecode} onChange={(v) => patch({ tiledDecode: v })}
-                  label="Tiled decode" hint="The safe default. Turning it off is unmeasured on long songs." />
               </div>
             </div>
           </Disclosure>

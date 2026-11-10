@@ -415,12 +415,10 @@ mod tests {
             py.dest.file_name().unwrap().to_string_lossy(),
             "cpython-3.12.16+20261026-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
         );
-        let dit = artifact(comp, "music-dit").unwrap();
+        let ckpt = artifact(comp, "music-checkpoint").unwrap();
         assert_eq!(
-            dit.dest,
-            Path::new(
-                r"C:\c\comfy-data\models\diffusion_models\minimax_music3_dit_fp16.safetensors"
-            )
+            ckpt.dest,
+            Path::new(r"C:\c\comfy-data\models\checkpoints\yue2_3b_int8_convrot.safetensors")
         );
         assert!(artifact(comp, "nope").is_none());
         if let Some(w) = manifest().python.wheels.first() {

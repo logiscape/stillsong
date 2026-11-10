@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Mp3Quality, RenderMethod } from '@engine/domain/types';
+import type { Mp3Quality } from '@engine/domain/types';
 import { saveSettings, useAppState } from '@state/store';
 import manifest from '../../../components.json';
 import { Badge } from '@ui/ds/Badge';
@@ -66,23 +66,11 @@ export function AboutScreen(): React.ReactElement {
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 'var(--space-8) var(--gutter-screen) var(--space-9)' }}>
       <div style={{ maxWidth: 640 }}>
-        <h1 style={{ font: 'var(--display-md)', color: 'var(--ink-1)', margin: '0 0 var(--space-8)', letterSpacing: 'var(--tracking-display)' }}>Stillsong</h1>
+        <h1 style={{ font: 'var(--display-md)', color: 'var(--ink-1)', margin: '0 0 var(--space-8)', letterSpacing: 'var(--tracking-display)' }}>Stillsong 2</h1>
 
         {settings && (
           <Section title="Settings">
             <Panel pad={20} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-              <div>
-                <Select
-                  label="How new songs are made"
-                  value={settings.renderMethod}
-                  onChange={(v) => void saveSettings({ ...settings, renderMethod: v as RenderMethod })}
-                  options={[{ value: 'fast', label: 'Fast' }, { value: 'enhanced', label: 'Enhanced quality' }]}
-                />
-                <span style={{ display: 'block', font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: 8, maxWidth: '52ch' }}>
-                  Enhanced quality gives the studio more time with each song, so voices and instruments come out
-                  clearer — and a song takes a while longer to make. Any song made the fast way can be enhanced later.
-                </span>
-              </div>
               <div>
                 <Select
                   label="Quality of saved songs"
@@ -122,16 +110,17 @@ export function AboutScreen(): React.ReactElement {
         <Section title="About">
           <Panel variant="quiet" pad={20}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-              <span style={{ font: '300 30px/1 var(--font-display)', color: 'var(--ink-1)' }}>Stillsong</span>
-              <Badge mono>1.1.0</Badge>
+              <span style={{ font: '300 30px/1 var(--font-display)', color: 'var(--ink-1)' }}>Stillsong 2</span>
+              <Badge mono>2.0.0</Badge>
             </div>
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 'var(--space-5) 0 0', maxWidth: '54ch' }}>
-              Stillsong never connects to the internet after setup. Your photos and songs stay on this computer.
+              Stillsong 2 never connects to the internet after setup. Your photos and songs stay on this computer.
+              It is a separate app from the original Stillsong, with its own songs and studio.
             </p>
             <div style={{ marginTop: 'var(--space-7)', display: 'flex', flexDirection: 'column', gap: 6, font: 'var(--ui-sm)', color: 'var(--text-quiet)' }}>
               <span>A <span style={{ color: 'var(--ink-1)' }}>Logiscape</span> project</span>
               <span style={{ font: 'var(--ui-label)', color: 'var(--text-faint)', letterSpacing: '.04em' }}>With acknowledgement to</span>
-              <span>Music composed locally by <span style={{ color: 'var(--ink-1)' }}>MiniMax-Music3</span></span>
+              <span>Music composed locally by <span style={{ color: 'var(--ink-1)' }}>YuE2</span></span>
               <span>Lyrics by <span style={{ color: 'var(--ink-1)' }}>Gemma 4</span></span>
               <span>Engines: <span style={{ color: 'var(--ink-1)' }}>ComfyUI</span>, <span style={{ color: 'var(--ink-1)' }}>llama.cpp</span></span>
             </div>
@@ -154,10 +143,9 @@ export function AboutScreen(): React.ReactElement {
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 'var(--space-5) 0 0', maxWidth: '58ch' }}>
               Every song Stillsong makes carries a small text tag inside the MP3, written by
               the renderer: the complete recipe for the song. That is the caption and lyrics
-              Gemma wrote, the seed, the length cap and sampler settings, the model file
-              names — and, for a song that continues an earlier take (Let it finish, or a
-              Remix that keeps a section), the composition codes of the part being continued.
-              With the same models, that recipe re-creates the audio exactly.
+              Gemma wrote, the melody plan (a short sheet of notes and chords), the seed, the
+              length cap and sampler settings, and the model file name. With the same models,
+              that recipe re-creates the audio exactly.
             </p>
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 'var(--space-5) 0 0', maxWidth: '58ch' }}>
               It never contains your photo or drawing, or anything made from its pixels — the
@@ -167,7 +155,7 @@ export function AboutScreen(): React.ReactElement {
             </p>
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 'var(--space-5) 0 0', maxWidth: '58ch' }}>
               Save a copy adds one more tag: a comment noting the music was generated with
-              MiniMax-Music3 in Stillsong.
+              YuE2 in Stillsong 2.
             </p>
           </Panel>
         </Section>
@@ -175,7 +163,7 @@ export function AboutScreen(): React.ReactElement {
         <Section title="License">
           <Panel variant="quiet" pad={20}>
             <p style={{ font: 'var(--ui-md)', color: 'var(--text-body)', margin: 0, maxWidth: '58ch' }}>
-              © 2026 Logiscape LLC. Stillsong is free software under the GNU General Public
+              © 2026 Logiscape LLC. Stillsong 2 is free software under the GNU General Public
               License v3 — you may run, study, share, and change it. It comes with
               absolutely no warranty.
             </p>

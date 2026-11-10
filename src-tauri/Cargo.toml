@@ -1,12 +1,12 @@
 [package]
-name = "stillsong"
-version = "1.1.0"
-description = "Stillsong — turn a photo into a song that tells its story"
+name = "stillsong2"
+version = "2.0.0"
+description = "Stillsong 2 — turn a photo into a song that tells its story"
 edition = "2021"
 license = "GPL-3.0-only"
 
 [lib]
-name = "stillsong_lib"
+name = "stillsong2_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -26,7 +26,7 @@ sha2 = "0.10"
 base64 = "0.22"
 image = "0.25"
 win32job = "2"
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_System_SystemInformation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Threading"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 flate2 = "1"
 tar = "0.4"

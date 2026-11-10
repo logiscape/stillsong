@@ -4,9 +4,16 @@
 // process trees itself, and `child.kill()` misses grandchildren like the
 // python launcher -> worker tree).
 //
-// Dev mode: STILLSONG_COMFY_URL / STILLSONG_LLM_URL point a service at an
+// Dev mode: STILLSONG2_COMFY_URL / STILLSONG2_LLM_URL point a service at an
 // externally managed instance instead of spawning one (the reference dev
-// workflow); STILLSONG_COMPONENTS overrides the components dir.
+// workflow); STILLSONG2_COMPONENTS overrides the components dir. The `2`
+// keeps a globally set Stillsong 1 variable from pointing this build at v1's
+// runtime (whose stale marker would send it to the update screen, which
+// deletes that runtime).
+//
+// Stillsong 1 may run on the same PC: ports come from identity::PORT_RANGE,
+// and the studio lock (identity::StudioLock, plus a check for a running v1)
+// keeps two apps from loading models onto the GPU at once.
 
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
@@ -18,7 +25,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const PORT_RANGE: std::ops::Range<u16> = 17800..17900;
+use crate::identity::PORT_RANGE;
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const LOG_KEEP: u32 = 5;
 
@@ -145,8 +152,8 @@ fn remove_dir_all_retry(path: &Path) -> Result<(), String> {
 }
 
 /// Runtime directories an update replaces. Everything else under the
-/// components dir — the models, `comfy-data/` (user output, the overlay
-/// mirror) — is kept.
+/// components dir — the models, `comfy-data/` (models, user output) — is
+/// kept.
 const RUNTIME_DIRS: [&str; 7] = [
     "python-env",
     "uv-cache",
@@ -303,10 +310,8 @@ pub struct Supervisor {
     log_dir: PathBuf,
     external_comfy: Option<String>,
     external_llm: Option<String>,
-    // Bundled ComfyUI-Stillsong custom-node package (app resources), mirrored
-    // into comfy-data/custom_nodes before each spawn. None = ship without it
-    // (the engine probes the node and degrades to stock behavior).
-    overlay_dir: Option<PathBuf>,
+    // Held while any supervised child runs (see identity::StudioLock).
+    studio_lock: std::sync::Mutex<Option<crate::identity::StudioLock>>,
     // Set while prepare_update is tearing the runtime down. A spawn that
     // slips in between stop_all and the deletions (ensure_comfy registers
     // its child only after spawning) would otherwise hold the files open.
@@ -314,14 +319,16 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    pub fn new(app_data_dir: PathBuf, overlay_dir: Option<PathBuf>) -> Result<Self, String> {
+    /// `default_components_dir` is `<app local data>\components`, derived
+    /// from the app identifier like every other per-app path.
+    pub fn new(app_data_dir: PathBuf, default_components_dir: PathBuf) -> Result<Self, String> {
         let job = win32job::Job::create().map_err(|e| e.to_string())?;
         let mut info = job.query_extended_limit_info().map_err(|e| e.to_string())?;
         info.limit_kill_on_job_close();
         job.set_extended_limit_info(&info)
             .map_err(|e| e.to_string())?;
 
-        let components_dir = std::env::var("STILLSONG_COMPONENTS")
+        let components_dir = std::env::var("STILLSONG2_COMPONENTS")
             .map(PathBuf::from)
             .ok()
             .or_else(|| {
@@ -329,7 +336,7 @@ impl Supervisor {
                     .ok()
                     .map(|s| PathBuf::from(s.trim()))
             })
-            .unwrap_or_else(default_components_dir);
+            .unwrap_or(default_components_dir);
         let log_dir = app_data_dir.join("logs");
         std::fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
         Ok(Self {
@@ -338,11 +345,32 @@ impl Supervisor {
             components_dir: std::sync::Mutex::new(components_dir),
             app_data_dir,
             log_dir,
-            external_comfy: std::env::var("STILLSONG_COMFY_URL").ok(),
-            external_llm: std::env::var("STILLSONG_LLM_URL").ok(),
-            overlay_dir,
+            external_comfy: std::env::var("STILLSONG2_COMFY_URL").ok(),
+            external_llm: std::env::var("STILLSONG2_LLM_URL").ok(),
+            studio_lock: std::sync::Mutex::new(None),
             updating: AtomicBool::new(false),
         })
+    }
+
+    /// Takes the cross-app studio lock before a child is spawned (a no-op
+    /// once held). Refused while Stillsong 1 runs — it predates the lock —
+    /// or while another app holds it.
+    fn claim_studio(&self) -> Result<(), String> {
+        let mut slot = self.studio_lock.lock().unwrap();
+        if slot.is_some() {
+            return Ok(());
+        }
+        if crate::identity::v1_running() {
+            return Err(crate::identity::V1_RUNNING.into());
+        }
+        *slot = Some(crate::identity::StudioLock::acquire(
+            crate::identity::STUDIO_LOCK_NAME,
+        )?);
+        Ok(())
+    }
+
+    fn release_studio(&self) {
+        self.studio_lock.lock().unwrap().take();
     }
 
     /// Installed components versus this binary's manifest. An external dev
@@ -358,8 +386,8 @@ impl Supervisor {
     }
 
     /// The spawn gate: a studio this binary did not install is never started
-    /// (its ComfyUI may not know our flags, and the bundled overlay refuses
-    /// a base it was not derived from — silently, from the UI's point of view).
+    /// (its ComfyUI may not know our flags or ship the nodes we build graphs
+    /// from).
     fn refuse_spawn_if_stale(&self) -> Result<(), String> {
         if self.updating.load(Ordering::SeqCst) {
             return Err(UPDATE_IN_PROGRESS.into());
@@ -488,6 +516,7 @@ impl Supervisor {
             }
             inner.llm = None;
         }
+        self.claim_studio()?;
         let comp = self.components_dir();
         let exe = comp.join("llama").join("llama-server.exe");
         let model = comp.join("models").join("gemma-4-12B-it-Q4_0.gguf");
@@ -524,8 +553,54 @@ impl Supervisor {
             .spawn()
             .map_err(|e| format!("could not start llama-server: {e}"))?;
         self.assign_to_job(&child)?;
+        let pid = child.id();
         inner.llm = Some(Proc { child, port });
+        drop(inner);
+        // Identity guard, as for ComfyUI: the engine's base URL was fixed when
+        // the port was reserved, so if another program bound it since, the
+        // engine would be talking to a stranger. llama-server binds before it
+        // loads the model, so this resolves within a second or two.
+        if let Err(e) = self
+            .verify_listener(port, pid, Duration::from_secs(15))
+            .await
+        {
+            if let Some(mut p) = self.inner.lock().await.llm.take() {
+                let _ = p.child.kill();
+                let _ = tokio::task::spawn_blocking(move || p.child.wait()).await;
+            }
+            return Err(e);
+        }
         Ok(())
+    }
+
+    /// Waits until `port` has a listener and checks that it is `pid` or a
+    /// member of our Job Object. No answer from netstat within `timeout` is
+    /// accepted (best effort, like the ComfyUI guard).
+    async fn verify_listener(&self, port: u16, pid: u32, timeout: Duration) -> Result<(), String> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let owner = tokio::task::spawn_blocking(move || listening_pid(port))
+                .await
+                .ok()
+                .flatten();
+            if let Some(owner) = owner {
+                let ours = owner == pid
+                    || self
+                        .job
+                        .query_process_id_list()
+                        .map(|pids| pids.contains(&(owner as usize)))
+                        .unwrap_or(true);
+                return if ours {
+                    Ok(())
+                } else {
+                    Err("Another program answered on the songwriter's port.".into())
+                };
+            }
+            if std::time::Instant::now() > deadline {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
     }
 
     /// Stops llama-server and resolves only once the process has exited —
@@ -578,6 +653,7 @@ impl Supervisor {
         if !python.exists() || !main_py.exists() {
             return Err("The studio runtime is not installed.".into());
         }
+        self.claim_studio()?;
         let port = {
             let mut inner = self.inner.lock().await;
             let taken = inner.llm_port;
@@ -589,18 +665,10 @@ impl Supervisor {
         // other standard folders) without creating them, so a fresh
         // --base-directory must be seeded or main.py dies before serving.
         let comfy_data = comp.join("comfy-data");
+        // Stillsong 2 runs stock ComfyUI with no custom nodes at all; the
+        // empty custom_nodes dir only satisfies ComfyUI's startup scan.
         for sub in ["custom_nodes", "models", "input", "output", "temp", "user"] {
             std::fs::create_dir_all(comfy_data.join(sub)).map_err(|e| e.to_string())?;
-        }
-        // Keep the vendored overlay in sync with this app version. Best-effort:
-        // a failed copy means the engine sees a stock ComfyUI and degrades.
-        if let Some(src) = &self.overlay_dir {
-            if src.is_dir() {
-                let dest = comfy_data.join("custom_nodes").join("ComfyUI-Stillsong");
-                if let Err(e) = copy_dir_replace(src, &dest) {
-                    eprintln!("stillsong: overlay install failed: {e}");
-                }
-            }
         }
         let log = self.log_file("comfyui")?;
         let log_err = log.try_clone().map_err(|e| e.to_string())?;
@@ -615,7 +683,7 @@ impl Supervisor {
         ];
         // Dev-only Patient-tier emulation (docs/PATIENT-TIER-MEASUREMENT.md):
         // hold N GB back from ComfyUI's memory budget. Never set in production.
-        if let Some(gb) = std::env::var("STILLSONG_RESERVE_VRAM")
+        if let Some(gb) = std::env::var("STILLSONG2_RESERVE_VRAM")
             .ok()
             .and_then(|v| v.trim().parse::<f64>().ok())
         {
@@ -689,6 +757,10 @@ impl Supervisor {
             let _ = p.child.kill();
             let _ = tokio::task::spawn_blocking(move || p.child.wait()).await;
         }
+        // Both children are gone (the update path also waits out their
+        // grandchildren before deleting anything): another app may now load
+        // its models.
+        self.release_studio();
     }
 
     pub async fn status(&self) -> (ServiceState, ServiceState) {
@@ -816,36 +888,12 @@ impl Supervisor {
     }
 }
 
-/// Replace `dest` with a copy of `src` (skipping __pycache__). Used to mirror
-/// the bundled ComfyUI-Stillsong overlay into comfy-data/custom_nodes.
-fn copy_dir_replace(src: &Path, dest: &Path) -> Result<(), String> {
-    if dest.exists() {
-        std::fs::remove_dir_all(dest).map_err(|e| e.to_string())?;
-    }
-    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
-    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let name = entry.file_name();
-        if name == "__pycache__" {
-            continue;
-        }
-        let from = entry.path();
-        let to = dest.join(&name);
-        if from.is_dir() {
-            copy_dir_replace(&from, &to)?;
-        } else {
-            std::fs::copy(&from, &to).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
 /// Best-effort HKCU record of the components path for the NSIS uninstaller.
 fn write_components_dir_registry(dir: &Path) {
     let _ = Command::new("reg")
         .args([
             "add",
-            r"HKCU\Software\Logiscape\Stillsong",
+            crate::identity::REGISTRY_KEY,
             "/v",
             "ComponentsDir",
             "/t",
@@ -858,13 +906,6 @@ fn write_components_dir_registry(dir: &Path) {
         .output();
 }
 
-fn default_components_dir() -> PathBuf {
-    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
-    Path::new(&base)
-        .join("com.logiscape.stillsong")
-        .join("components")
-}
-
 fn pick_free_port(taken: Option<u16>) -> Result<u16, String> {
     for port in PORT_RANGE {
         if Some(port) == taken {
@@ -874,7 +915,11 @@ fn pick_free_port(taken: Option<u16>) -> Result<u16, String> {
             return Ok(port);
         }
     }
-    Err("no free local port in 17800-17899".into())
+    Err(format!(
+        "no free local port in {}-{}",
+        PORT_RANGE.start,
+        PORT_RANGE.end - 1
+    ))
 }
 
 fn rotate_log(path: &Path) {
@@ -1200,7 +1245,7 @@ mod tests {
             touch(&format!("{d}/some/file.bin"), 3);
         }
         let user = touch("comfy-data/user/settings.json", 2);
-        let overlay = touch("comfy-data/custom_nodes/ComfyUI-Stillsong/__init__.py", 2);
+        let node = touch("comfy-data/custom_nodes/user-added/__init__.py", 2);
         let good_model = touch("comfy-data/models/vae/x.safetensors", 10);
         let bad_model = touch("models/gemma.gguf", 9);
         let old_uv = touch("_downloads/uv-x86_64-pc-windows-msvc.zip", 5);
@@ -1225,7 +1270,7 @@ mod tests {
         for d in RUNTIME_DIRS {
             assert!(!dir.join(d).exists(), "{d} should be gone");
         }
-        assert!(user.exists() && overlay.exists(), "comfy-data is kept");
+        assert!(user.exists() && node.exists(), "comfy-data is kept");
         assert!(good_model.exists(), "a model of the pinned size is kept");
         assert!(!bad_model.exists(), "a model of another size is refetched");
         assert!(

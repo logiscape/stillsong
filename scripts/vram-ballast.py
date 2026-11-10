@@ -6,7 +6,7 @@
 # Run with the components venv (has CUDA torch), BEFORE starting ComfyUI or
 # llama-server, and kill it the moment the measurement run ends:
 #
-#   & "$env:LOCALAPPDATA\com.logiscape.stillsong\components\python-env\Scripts\python.exe" `
+#   & "$env:LOCALAPPDATA\com.logiscape.stillsong2\components\python-env\Scripts\python.exe" `
 #       scripts\vram-ballast.py 8
 #
 # Worst case if oversized: this process gets a clean CUDA OOM, or WDDM spills

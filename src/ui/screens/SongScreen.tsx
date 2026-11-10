@@ -5,9 +5,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { parseLyrics } from '@engine/cowriter/lyrics';
-import { canEnhance, genreTag } from '@engine/domain/types';
+import { genreTag } from '@engine/domain/types';
 import {
-  canRerunLonger, deleteSong, enhancePending, enhanceSong, exportSong, navigate, openSong, photoSrc, playSong, renameSong, rerunLonger,
+  deleteSong, exportSong, navigate, openSong, photoSrc, playSong, renameSong,
   revealSong, saveSettings, seek, setVolume, stopPlayback, togglePlay, useAppState,
 } from '@state/store';
 import { Badge } from '@ui/ds/Badge';
@@ -35,7 +35,6 @@ export function SongScreen(): React.ReactElement | null {
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [confirmEnhance, setConfirmEnhance] = useState(false);
   const prefersContrast = useMemo(() => window.matchMedia('(prefers-contrast: more)').matches, []);
   const lyricsRef = useRef<HTMLDivElement | null>(null);
 
@@ -73,12 +72,9 @@ export function SongScreen(): React.ReactElement | null {
   const solid = !!s.settings?.solidPanelMode || prefersContrast;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const photo = photoSrc(song.spec.photo);
-  const pending = enhancePending(song, s.songs);
-  const enhanceable = canEnhance(song) && !pending;
 
   const menuItems: [string, string, () => void][] = [
     ['shuffle', 'Remix this song', () => navigate('remix')],
-    ...(enhanceable ? ([['wand-sparkles', 'Enhance quality…', () => setConfirmEnhance(true)]] as [string, string, () => void][]) : []),
     ['download', 'Save a copy…', () => void exportSong(song)],
     ['folder-open', 'Reveal in folder', () => void revealSong(song)],
     ['pencil-line', 'Rename', () => setRenaming(song.spec.title)],
@@ -91,24 +87,17 @@ export function SongScreen(): React.ReactElement | null {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 22px' }}>
         <IconButton icon="chevron-left" label="Close" variant="glass" onClick={() => { stopPlayback(); navigate('sanctuary'); }} />
         <div style={{ flex: 1 }} />
-        {canEnhance(song) && (
-          <Button variant="glass" size="sm" icon="wand-sparkles" disabled={pending} onClick={() => setConfirmEnhance(true)}>
-            {pending ? 'Enhancing…' : 'Enhance quality'}
-          </Button>
-        )}
         <IconButton icon="shuffle" label="Remix" variant="glass" onClick={() => navigate('remix')} />
         <IconButton icon="ellipsis" label="More" variant="glass" onClick={() => setMenu(!menu)} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', padding: '0 var(--gutter-screen)' }}>
         <div ref={lyricsRef} style={{ maxWidth: 520, maxHeight: '100%', overflowY: 'auto', paddingRight: 8 }}>
-          {song.hitCeiling && canRerunLonger(song) && (
-            <Notice tone="calm" glass action="Let it finish" onAction={() => void rerunLonger(song)}
-              title="This song wanted to run longer than expected"
+          {song.hitCeiling && (
+            <Notice tone="calm" glass action="Remix" onAction={() => navigate('remix')}
+              title="This song ran out of room before its ending"
               style={{ marginBottom: 'var(--space-6)', maxWidth: 420 }}>
-              {song.codesPath
-                ? 'We can replay this exact performance with more room, so it gets to write its own ending.'
-                : 'We can give it another half minute with the same seed — the song usually, but not always, comes out close.'}
+              A remix with a few fewer lines usually gives it time to finish on its own.
             </Notice>
           )}
           <LyricSheet
@@ -168,18 +157,6 @@ export function SongScreen(): React.ReactElement | null {
           </>
         }>
         Anything you saved with Save a copy stays where you saved it. The song will be removed from Stillsong.
-      </Dialog>
-
-      <Dialog open={confirmEnhance} title="Enhance the sound?" onClose={() => setConfirmEnhance(false)}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmEnhance(false)}>Not now</Button>
-            <Button variant="primary" icon="wand-sparkles" onClick={() => { setConfirmEnhance(false); void enhanceSong(song); }}>Enhance quality</Button>
-          </>
-        }>
-        The studio will record this very same performance again and take more time over the sound, so some
-        voices and instruments come out sharper. It usually takes 5–10 minutes, depending on the song.
-        The enhanced take arrives as a new version, and this one stays just as it is.
       </Dialog>
 
       {renaming !== null && (

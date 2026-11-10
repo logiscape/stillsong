@@ -26,7 +26,7 @@
   leaves the building.
 
 .EXAMPLE
-  .\build-physical.ps1 -FromComponents "$env:LOCALAPPDATA\com.logiscape.stillsong\components" -Iso
+  .\build-physical.ps1 -FromComponents "$env:LOCALAPPDATA\com.logiscape.stillsong2\components" -Iso
   .\build-physical.ps1 -SkipBuild -Burn
   .\build-physical.ps1 -SkipBuild -Usb E: -VerifyDrive E:
 #>

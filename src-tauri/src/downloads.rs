@@ -805,10 +805,10 @@ mod tests {
     /// Live redirect check: the smallest manifest item (uv, ~17 MB) goes
     /// github.com -> release-assets.githubusercontent.com; the pinned first
     /// hop is allowlisted, the CDN hop is followed because it is https, and
-    /// the bytes must hash. Skipped without STILLSONG_LIVE_DOWNLOAD=1.
+    /// the bytes must hash. Skipped without STILLSONG2_LIVE_DOWNLOAD=1.
     #[tokio::test]
     async fn redirect_hops_are_followed_live() {
-        if std::env::var("STILLSONG_LIVE_DOWNLOAD").is_err() {
+        if std::env::var("STILLSONG2_LIVE_DOWNLOAD").is_err() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("stillsong-dl-{}", std::process::id()));
@@ -878,10 +878,10 @@ mod tests {
     /// hash, and the file must verify. Progress after the "reconnecting"
     /// note never drops (a restart from zero would show as a smaller value),
     /// so a broken carry cannot hide behind the retry path. Skipped without
-    /// STILLSONG_LIVE_DOWNLOAD=1.
+    /// STILLSONG2_LIVE_DOWNLOAD=1.
     #[tokio::test]
     async fn watchdog_reconnect_resumes_and_verifies_live() {
-        if std::env::var("STILLSONG_LIVE_DOWNLOAD").is_err() {
+        if std::env::var("STILLSONG2_LIVE_DOWNLOAD").is_err() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("stillsong-dl-wd-{}", std::process::id()));

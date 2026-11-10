@@ -54,7 +54,7 @@ WHAT IS ON THE DISC
                           setup script, and the exact list of components
                           with their hashes (components.json).
   components\             The studio: the songwriter model (Gemma 4), the
-                          music model (MiniMax Music 3), the tools that run
+                          music model (YuE2), the tools that run
                           them (llama.cpp, ComfyUI, Python), and every
                           library they depend on. All of it is exactly what
                           the online installer would download.

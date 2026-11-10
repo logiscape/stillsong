@@ -28,7 +28,10 @@ type Voice = 'instrumental' | 'female' | 'male';
 function StatusExperience({ creation }: { creation: CreationState }): React.ReactElement {
   const idx = stageIndex(creation.stage);
   const p = creation.progress;
-  const composing = creation.stage === 'composing' && p?.stepNode === 'encode' && p.stepValue != null;
+  // Composing has two bars: the melody plan (no length estimate: its max is
+  // a ceiling, not a forecast), then the performance (25 tokens = 1 s written).
+  const planning = creation.stage === 'composing' && p?.stepNode === 'plan';
+  const composing = creation.stage === 'composing' && p?.stepNode === 'perform' && p.stepValue != null;
   const rendering = creation.stage === 'rendering' && p?.stepNode === 'sample' && p.stepValue != null && p.stepMax;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', height: '100%', alignItems: 'center', gap: 'var(--space-9)', padding: 'var(--gutter-screen)' }}>
@@ -52,8 +55,10 @@ function StatusExperience({ creation }: { creation: CreationState }): React.Reac
           </div>
         )}
         <div style={{ height: 'var(--space-7)' }} />
-        {composing ? (
-          <ProgressBar indeterminate label="Composing the melody…" detail={`${fmtDuration((p!.stepValue ?? 0) / AUDIO_FRAMES_PER_SECOND)} written`} />
+        {planning ? (
+          <ProgressBar indeterminate label="Writing the melody…" />
+        ) : composing ? (
+          <ProgressBar indeterminate label="Composing the song…" detail={`${fmtDuration((p!.stepValue ?? 0) / AUDIO_FRAMES_PER_SECOND)} written`} />
         ) : rendering ? (
           <ProgressBar
             value={(p!.stepValue ?? 0) / (p!.stepMax ?? 1)}

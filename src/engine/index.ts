@@ -8,15 +8,14 @@
 import { newId, type Ports } from './ports';
 import { migrate } from './migrations';
 import type { Job, PhotoAsset, Song, SongSpec, VocalPref } from './domain/types';
-import { AUDIO_FRAMES_PER_SECOND, CAP, DURATION, RENDER_STEPS, canEnhance, defaultSpec, isEnhanceOf, randomSeed } from './domain/types';
+import { AUDIO_FRAMES_PER_SECOND, DURATION, defaultSpec, randomSeed } from './domain/types';
 import { validateSpec, type ValidationIssue } from './domain/validate';
-import { capCeiling, hardwareTier, renderCap, type HardwareTier } from './domain/duration';
+import { hardwareTier, type HardwareTier } from './domain/duration';
 import type { HardwareInfo, RuntimeInstallState } from './ports';
-import { buildGraph, type StillsongGraphOpts } from './comfy/graphBuilder';
-import { b64ToBytes, bytesToB64, parseCodesHeader, sliceCodes } from './comfy/codes';
-import { ComfyClient } from './comfy/client';
+import { buildGraph, PLAN_OUT, SECONDS_OUT } from './comfy/graphBuilder';
+import { ComfyClient, type HistoryEntry } from './comfy/client';
 import { ProgressTracker, type ProgressEvent } from './comfy/events';
-import { SongRepo, type ComposedLength, type RenderPrefix } from './repo/songs';
+import { SongRepo, type ComposedLength } from './repo/songs';
 import { PhotoRepo } from './repo/photos';
 import { JobRepo } from './repo/jobs';
 import { SettingsRepo, type AppSettings } from './repo/settings';
@@ -27,7 +26,7 @@ import { VramArbiter } from './orchestrator/vram';
 import { seedExamples } from './examples';
 
 /** Where our renders land under ComfyUI's output dir (the graph's filename_prefix folder). */
-export const RENDER_OUTPUT_SUBFOLDER = 'audio/stillsong';
+export const RENDER_OUTPUT_SUBFOLDER = 'audio/stillsong2';
 
 /** `filename_prefix` for a song's render: ComfyUI appends `_NNNNN` + extension. */
 export function renderFilePrefix(songId: string): string {
@@ -41,7 +40,10 @@ export interface JobProgress {
   stepValue?: number;
   stepMax?: number;
   etaSeconds?: number | null;
-  /** 'encode' (audio frames) or 'sample' (diffusion steps) — which bar is moving. */
+  /**
+   * Which bar is moving: 'plan' (melody plan tokens), 'perform' (music
+   * tokens, 25 per second of song) or 'sample' (diffusion steps).
+   */
   stepNode?: string;
 }
 
@@ -75,17 +77,9 @@ export class Engine {
   private currentJob: Job | null = null;
   private creating = false;
 
-  /** Detected hardware and the tier-derived ceiling for render caps. */
+  /** Detected hardware and its support tier. */
   public hardware: HardwareInfo = { vendor: 'unknown', vramMb: 0, ramMb: 0 };
   public tier: HardwareTier = 'fast';
-  public capCeilingSec: number = Infinity;
-  /**
-   * Whether ComfyUI has the Stillsong overlay encoder (comfy-overlay/). With
-   * it, every render captures its composition codes and re-runs can
-   * teacher-force a prefix; without it (external stock ComfyUI), everything
-   * degrades to the official node's behavior.
-   */
-  public hasStillsongEncode = false;
   /**
    * Installed components versus this build's manifest, read once at boot.
    * Anything but `ready` keeps the job queue parked: the supervisor refuses
@@ -125,8 +119,6 @@ export class Engine {
     );
     engine.hardware = await ports.runtime.hardware().catch(() => engine.hardware);
     engine.tier = hardwareTier(engine.hardware);
-    engine.capCeilingSec = capCeiling(engine.hardware.vramMb);
-    engine.hasStillsongEncode = await comfy.hasNode('StillsongMusic3TextEncode');
     engine.installState = await ports.runtime.installState().catch(() => engine.installState);
     await engine.recoverInFlight();
     // After recovery so an in-flight render being harvested on this boot is
@@ -192,9 +184,8 @@ export class Engine {
       const photo = (req.photoId ? await this.photos.byId(req.photoId) : null) ?? (await this.importPhoto(req.photoPath));
 
       const instrumental = req.vocalPref === 'instrumental';
-      // On low-VRAM tiers the cap ceiling is lower; shrink the target so the
-      // composer keeps its ending headroom instead of running into the cap.
-      const targetSec = Math.min(DURATION.default, Math.floor((this.capCeilingSec - CAP.pad) / CAP.headroom));
+      // The co-writer's brief is Stillsong 1's, unchanged: a 120 s target.
+      const targetSec = DURATION.default;
       const cowriteReq: CowriteRequest = {
         idea: '',
         photo,
@@ -223,18 +214,17 @@ export class Engine {
         await this.vram.releaseLlm();
       }
 
+      // durationSec stays defaultSpec's MAX_DURATION_SEC: the same cap for
+      // every song, so a remix with the same seed is the same performance.
       const spec: SongSpec = {
-        ...defaultSpec(this.settings.ditFile),
+        ...defaultSpec(this.settings.checkpoint),
         title: result.title,
         caption: result.caption,
         lyrics: result.lyrics,
         instrumental,
         photo,
         targetSec,
-        durationSec: renderCap(targetSec, result.lyrics, this.capCeilingSec),
         seed: randomSeed(),
-        tiledDecode: this.settings.tiledDecode,
-        steps: RENDER_STEPS[this.settings.renderMethod],
         quality: this.settings.quality,
         vocalPref: req.vocalPref as VocalPref,
         genreHint: req.genreHint?.trim() || undefined,
@@ -256,15 +246,13 @@ export class Engine {
   // ---- queue ---------------------------------------------------------------
 
   /**
-   * Validates, persists, enqueues, and kicks the runner. `prefix` asks the
-   * render to teacher-force another song's saved composition ("Let it finish",
-   * same-seed lyric edits); it degrades to a free render when the codes or the
-   * overlay node are unavailable.
+   * Validates, persists, enqueues, and kicks the runner. A remix that keeps
+   * its parent's melody carries the plan in `spec.abc`.
    */
-  async enqueueSong(spec: SongSpec, parentId?: string, prefix?: RenderPrefix): Promise<Song> {
+  async enqueueSong(spec: SongSpec, parentId?: string): Promise<Song> {
     const errors = validateSpec(spec).filter((i) => i.severity === 'error');
     if (errors.length) throw new Error(errors.map((e) => e.message).join(' '));
-    const song = await this.songs.create(spec, this.ports.clock.now(), parentId, 'queued', prefix);
+    const song = await this.songs.create(spec, this.ports.clock.now(), parentId, 'queued');
     await this.jobs.enqueue(song.id, this.ports.clock.now());
     this.emit({ kind: 'queue_changed' });
     void this.pump();
@@ -272,8 +260,8 @@ export class Engine {
   }
 
   /**
-   * Send a failed render back to the studio as the same song: same id, spec,
-   * parent and forced prefix, so a remix or enhance that died in ComfyUI
+   * Send a failed render back to the studio as the same song: same id, spec
+   * and parent (and so the same kept melody), so a remix that died in ComfyUI
    * (a transient VRAM fault, a crashed process) is retried without the user
    * rebuilding their edit. The song row is reused rather than cloned — a
    * failed row is invisible in the library, and cloning would leave it behind.
@@ -295,36 +283,6 @@ export class Engine {
     // No further database read: the retry is accepted, and a rejected read
     // here would report it as failed. The row is what the write made it.
     return { ...song, status: 'queued', error: undefined };
-  }
-
-  /**
-   * "Enhance quality": re-render a song at the 'enhanced' step count as a new
-   * version beside it, like any remix. Only the sampler changes — same seed,
-   * same cap, and the saved composition is teacher-forced in full when it
-   * exists — so the result is the same performance with a sharper audio pass.
-   * The original stays: more steps usually help, but listening found they can
-   * over-sharpen some instruments, so the softer take is worth keeping. The
-   * composing stage still runs (the sampler consumes the composer's live
-   * hidden states, which are never stored), so this costs about what the
-   * original render did, plus the extra steps.
-   */
-  async enhanceSong(songId: string): Promise<Song> {
-    const song = await this.songs.byId(songId);
-    if (!song) throw new Error('That song is no longer here.');
-    if (!canEnhance(song)) throw new Error('This song is already at its best.');
-    // Same seed + same inputs is bit-identical, so a second enhance of the
-    // same song while one is in flight would only make a duplicate.
-    const pending = await this.pendingEnhanceOf(song);
-    if (pending) return pending;
-    const spec: SongSpec = { ...song.spec, steps: RENDER_STEPS.enhanced };
-    const prefix = song.codesPath ? { songId: song.id } : undefined;
-    return this.enqueueSong(spec, song.id, prefix);
-  }
-
-  /** An "Enhance quality" take of `song` that is still queued or rendering, if any. */
-  async pendingEnhanceOf(song: Song): Promise<Song | null> {
-    const children = await this.songs.pendingChildrenOf(song.id);
-    return children.find((c) => isEnhanceOf(c, song)) ?? null;
   }
 
   async cancelJob(jobId: string): Promise<void> {
@@ -349,7 +307,6 @@ export class Engine {
       for (const j of jobs) await this.cancelJob(j.id);
     }
     if (song.outputPath) await this.ports.files.remove(song.outputPath).catch(() => {});
-    if (song.codesPath) await this.ports.files.remove(song.codesPath).catch(() => {});
     await this.jobs.deleteForSong(id);
     // Children point at the deleted song's parent so lineage survives.
     await this.songs.reparentChildren(id, song.parentId ?? null);
@@ -407,7 +364,7 @@ export class Engine {
       await this.vram.acquireForComfy();
 
       const filePrefix = renderFilePrefix(song.id);
-      const { graph } = buildGraph(song.spec, filePrefix, await this.stillsongGraphOpts(song));
+      const { graph } = buildGraph(song.spec, filePrefix);
       let promptId = '';
 
       // Open the progress socket, submit, then track until terminal
@@ -431,7 +388,7 @@ export class Engine {
       await this.jobs.setState(job.id, 'harvesting');
       this.emit({ kind: 'queue_changed' });
       progress('Downloading song');
-      await this.harvest(job, song, promptId, startedAt, outcome.composed);
+      await this.harvest(job, song, promptId, startedAt, outcome.perform);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.jobs.setState(job.id, 'failed', { error: message, finishedAt: this.ports.clock.now() });
@@ -443,55 +400,18 @@ export class Engine {
     }
   }
 
-  /**
-   * Graph options for the overlay encoder: capture codes on every render;
-   * teacher-force the prefix song's composition when asked; pin the KV
-   * capacity to this tier's cap ceiling so cap changes can't shift numerics.
-   * Undefined (stock node) when the overlay isn't installed.
-   */
-  private async stillsongGraphOpts(song: Song): Promise<StillsongGraphOpts | undefined> {
-    // The startup probe races the supervised ComfyUI's boot (its failure is
-    // indistinguishable from a stock ComfyUI), so re-probe at render time —
-    // the VRAM arbiter has already talked to ComfyUI by now, so a false here
-    // really means the overlay is absent.
-    if (!this.hasStillsongEncode) {
-      this.hasStillsongEncode = await this.comfy.hasNode('StillsongMusic3TextEncode');
-    }
-    if (!this.hasStillsongEncode) return undefined;
-    const ceilingSec = Math.min(Number.isFinite(this.capCeilingSec) ? this.capCeilingSec : CAP.max, CAP.max);
-    const opts: StillsongGraphOpts = { kvCapacityFrames: Math.round(ceilingSec * AUDIO_FRAMES_PER_SECOND) };
-    if (!song.prefixSongId) return opts;
-    try {
-      const source = await this.songs.byId(song.prefixSongId);
-      if (!source?.codesPath || !(await this.ports.files.exists(source.codesPath))) return opts;
-      const bytes = b64ToBytes(await this.ports.files.readBase64(source.codesPath));
-      const sliced = song.prefixFrames != null ? sliceCodes(bytes, song.prefixFrames) : bytes;
-      if (parseCodesHeader(sliced).frames > 0) opts.prefixCodesB64 = bytesToB64(sliced);
-    } catch {
-      /* corrupt/missing codes — degrade to a free render rather than fail the job */
-    }
-    return opts;
-  }
-
-  private async harvest(job: Job, song: Song, promptId: string, startedAt: number | undefined, composed?: ComposedLength): Promise<void> {
+  private async harvest(job: Job, song: Song, promptId: string, startedAt: number | undefined, perform?: PerformProgress): Promise<void> {
     const hist = await this.comfy.history(promptId);
-    const audio = hist?.files.filter((f) => !f.filename.endsWith('.codes.bin'));
-    const file = audio?.find((f) => /\.(mp3|flac|opus|wav)$/i.test(f.filename)) ?? audio?.[0];
+    const file = hist?.files.find((f) => /\.(mp3|flac|opus|wav)$/i.test(f.filename)) ?? hist?.files[0];
     if (!file) throw new Error('Render finished but produced no audio output');
     const outPath = await this.comfy.downloadOutput(file, `songs/${song.id}.mp3`);
-    let codesPath: string | undefined;
-    const codesFile = hist?.files.find((f) => f.filename.endsWith('.codes.bin'));
-    if (codesFile) {
-      codesPath = await this.comfy.downloadOutput(codesFile, `songs/${song.id}.codes.bin`).catch(() => undefined);
-    }
-    // The library now holds the only copy that matters. ComfyUI's originals
+    // The library now holds the only copy that matters. ComfyUI's original
     // would otherwise accumulate forever (and outlive "delete song" — the
-    // mp3's ID3 tag carries the full prompt). Only what was copied is removed;
-    // a codes file whose copy failed stays for the next boot's sweep.
+    // mp3's ID3 tag carries the full prompt).
     await this.ports.runtime.removeComfyOutput(file).catch(() => {});
-    if (codesFile && codesPath) await this.ports.runtime.removeComfyOutput(codesFile).catch(() => {});
     const finishedAt = this.ports.clock.now();
-    await this.songs.setOutput(song.id, outPath, startedAt ? finishedAt - startedAt : undefined, composed, codesPath);
+    const composed = composedLength(hist, song.spec, perform);
+    await this.songs.setOutput(song.id, outPath, startedAt ? finishedAt - startedAt : undefined, composed, performedPlan(hist, song.spec));
     await this.jobs.setState(job.id, 'done', { finishedAt });
     const done = (await this.songs.byId(song.id))!;
     this.emit({ kind: 'song_done', song: done });
@@ -501,8 +421,8 @@ export class Engine {
    * Resolves when the prompt reaches a terminal state. Opens a dedicated WS
    * connection with a fresh clientId *before* `start` submits the prompt, so
    * no early events are lost; if the socket is quiet/absent, polls /history
-   * every 10s. The encode node's final progress value gives the actual
-   * composed length in frames.
+   * every 10s. The music node's last progress (tokens written vs. its budget)
+   * tells a truncated song from one that ended on its own.
    *
    * Why a fresh clientId per job: ComfyUI keys sockets by clientId and, when
    * an old socket disconnects, pops that key from its table. Reusing one id
@@ -516,12 +436,11 @@ export class Engine {
   private trackToCompletion(
     start: (clientId: string) => Promise<string>,
     progress: (phase: string, extra?: Partial<JobProgress>) => void,
-  ): Promise<{ kind: 'success'; composed?: ComposedLength } | { kind: 'interrupted' } | { kind: 'error'; message: string }> {
+  ): Promise<{ kind: 'success'; perform?: PerformProgress } | { kind: 'interrupted' } | { kind: 'error'; message: string }> {
     return new Promise((resolve) => {
       let settled = false;
       let promptId: string | null = null;
-      let encodeFrames: number | null = null;
-      let encodeMax: number | null = null;
+      let perform: PerformProgress | undefined;
       let wsClose: () => Promise<void> = async () => {};
       let cancelPoll: (() => void) | null = null;
       const pending: ProgressEvent[] = [];
@@ -531,7 +450,7 @@ export class Engine {
         settled = true;
         cancelPoll?.();
         void wsClose();
-        if (v.kind === 'success') resolve({ kind: 'success', composed: composedLength(encodeFrames, encodeMax) });
+        if (v.kind === 'success') resolve({ kind: 'success', perform });
         else resolve(v);
       };
 
@@ -573,10 +492,7 @@ export class Engine {
             progress(ev.phase);
             break;
           case 'step':
-            if (ev.nodeId === 'encode') {
-              encodeFrames = ev.value;
-              encodeMax = ev.max;
-            }
+            if (ev.nodeId === 'perform') perform = { value: ev.value, max: ev.max };
             progress(ev.phase, { stepValue: ev.value, stepMax: ev.max, etaSeconds: ev.etaSeconds, stepNode: ev.nodeId });
             break;
           case 'completed':
@@ -630,7 +546,7 @@ export class Engine {
    * Deletes render outputs under ComfyUI's output dir that belong to no song:
    * leftovers from harvests that pre-date harvest-time cleanup, from songs
    * deleted since, or from a copy that failed. Only our own
-   * `audio/stillsong/<id8>_*` files are considered; anything else in the
+   * `audio/stillsong2/<id8>_*` files are considered; anything else in the
    * tree is left alone. A file is kept while any song row (any status —
    * queued, rendering, failed) starts with its 8-hex prefix.
    */
@@ -696,12 +612,10 @@ export class Engine {
 
   /**
    * After first-run setup or the update screen has built the studio: re-read
-   * the install state, re-probe the overlay (it was probed at boot while the
-   * studio was absent or down), and release the jobs that boot left parked.
+   * the install state and release the jobs that boot left parked.
    */
   async refreshInstallState(): Promise<void> {
     this.installState = await this.ports.runtime.installState().catch(() => this.installState);
-    this.hasStillsongEncode = await this.comfy.hasNode('StillsongMusic3TextEncode');
     void this.pump();
   }
 
@@ -714,7 +628,7 @@ export class Engine {
     const outcome = await this.trackToCompletion(async () => promptId, progress);
     if (outcome.kind === 'success') {
       try {
-        await this.harvest(job, song, job.comfyPromptId, job.startedAt, outcome.composed);
+        await this.harvest(job, song, job.comfyPromptId, job.startedAt, outcome.perform);
         return;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -733,17 +647,34 @@ export class Engine {
   }
 }
 
-/**
- * Interpret the encoder's final progress. The AR model either emits
- * <|audio_end|> (frames well below max => natural ending, length known) or
- * runs into max_duration (frames within ~1 s of max => truncated mid-phrase).
- * Progress messages are batched, so the last value can sit a few frames short
- * of max even when the cap was hit — hence the one-second tolerance.
- */
-export function composedLength(frames: number | null, max: number | null): ComposedLength | undefined {
-  if (frames == null || max == null || max <= 0) return undefined;
-  const hitCeiling = frames >= max - AUDIO_FRAMES_PER_SECOND;
-  return hitCeiling ? { hitCeiling: true } : { hitCeiling: false, actualSec: frames / AUDIO_FRAMES_PER_SECOND };
+/** The music node's last progress event: tokens written (`value`) against its budget (`max`). */
+export interface PerformProgress {
+  value: number;
+  max: number;
 }
 
-export type { CowriteRequest, CowriteResult, LintIssue, ComposedLength, RenderPrefix };
+/**
+ * How long the song came out, and whether it was cut off. `seconds_out` is
+ * YuE2's own count of what it wrote (in /history even when cached). It hit
+ * the ceiling when it filled max_duration, or when the music node's progress
+ * reached its budget — which a long caption + lyrics + plan can shrink below
+ * max_duration (the node logs "music budget reduced"). The node checks for its
+ * end token every 16 tokens, so a natural end can overshoot by up to 15.
+ */
+export function composedLength(hist: HistoryEntry | null, spec: SongSpec, perform?: PerformProgress): ComposedLength | undefined {
+  const seconds = Number(hist?.texts[SECONDS_OUT]);
+  const budgetHit = perform != null && perform.max > 0 && perform.value >= perform.max - 16;
+  if (!(Number.isFinite(seconds) && seconds > 0)) return perform ? { hitCeiling: budgetHit } : undefined;
+  const capHit = seconds * AUDIO_FRAMES_PER_SECOND >= spec.durationSec * AUDIO_FRAMES_PER_SECOND - 16;
+  return { actualSec: seconds, hitCeiling: capHit || budgetHit };
+}
+
+/** The plan this take performed: the one it wrote (plan_out), else the one it was given. */
+export function performedPlan(hist: HistoryEntry | null, spec: SongSpec): string | undefined {
+  if (spec.planMode === 'off') return undefined;
+  const written = hist?.texts[PLAN_OUT];
+  if (written?.trim()) return written;
+  return spec.abc?.trim() ? spec.abc : undefined;
+}
+
+export type { CowriteRequest, CowriteResult, LintIssue, ComposedLength };

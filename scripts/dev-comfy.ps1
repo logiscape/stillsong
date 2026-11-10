@@ -16,7 +16,7 @@
 
 param(
     [int]$Port = 8000,
-    [string]$Components = (Join-Path $env:LOCALAPPDATA 'com.logiscape.stillsong\components'),
+    [string]$Components = (Join-Path $env:LOCALAPPDATA 'com.logiscape.stillsong2\components'),
     [double]$ReserveVram = 0,
     [string[]]$ExtraArgs = @()
 )

@@ -1,5 +1,9 @@
 # Patient-tier measurement pass (P2 acceptance)
 
+> **Historical (Stillsong 1).** This pass measured MiniMax Music 3 with the
+> composition-codes overlay. Stillsong 2 (YuE2) has not had a patient-tier pass
+> yet; `hardwareTier` keeps the same gates until one is done.
+
 **Objective:** prove the Patient tier (8–16 GB VRAM) produces the *same-quality*
 output as the fast tier — identical models, quantizations, graph, steps — just
 slower and with a lower song-length ceiling, and that the app stays stable

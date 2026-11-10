@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { Engine } from '@engine/index';
-import { RENDER_STEPS, canEnhance, defaultSpec, isEnhanceOf } from '@engine/domain/types';
+import { defaultSpec } from '@engine/domain/types';
 import { flush, makePorts } from './fakes';
 
 const spec = () => ({
@@ -35,8 +35,8 @@ describe('Engine job pipeline', () => {
     expect(stopIdx).toBeGreaterThanOrEqual(0);
     expect(startComfyIdx).toBeGreaterThan(stopIdx);
     expect(submitIdx).toBeGreaterThan(startComfyIdx);
-    expect(world.submittedGraph?.encode.inputs).toMatchObject({ seed: 7, max_duration: 20, lyrics: '[verse]\nhello' });
-    expect(world.submittedGraph?.save.inputs.filename_prefix).toBe(`audio/stillsong/${song.id.slice(0, 8)}`);
+    expect(world.submittedGraph?.perform.inputs).toMatchObject({ seed: 7, max_duration: 20, lyrics: '[verse]\nhello' });
+    expect(world.submittedGraph?.save.inputs.filename_prefix).toBe(`audio/stillsong2/${song.id.slice(0, 8)}`);
 
     expect((await engine.jobs.active())[0]?.state).toBe('running');
     world.historyStatus = 'success';
@@ -47,11 +47,11 @@ describe('Engine job pipeline', () => {
     expect(done?.status).toBe('done');
     expect(done?.outputPath).toBe(`C:\\lib\\songs/${song.id}.mp3`);
     expect(done?.renderMs).toBe(10_000);
-    expect(files.downloaded[0]).toContain('/view?filename=x_00001_.mp3&subfolder=audio%5Cstillsong&type=output');
+    expect(files.downloaded[0]).toContain('/view?filename=x_00001_.mp3&subfolder=audio%5Cstillsong2&type=output');
     expect(events).toContain('song_done');
     expect(await engine.jobs.active()).toEqual([]);
     // ComfyUI's own copy is deleted once the library holds the render.
-    expect(runtime.removedOutputs).toEqual([{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong', type: 'output' }]);
+    expect(runtime.removedOutputs).toEqual([{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2', type: 'output' }]);
   });
 
   it('sweeps orphaned ComfyUI outputs at startup and keeps files that belong to songs', async () => {
@@ -64,25 +64,27 @@ describe('Engine job pipeline', () => {
     // Leftovers as ComfyUI writes them on Windows (backslash subfolder), one
     // forward-slash variant, one belonging to a live song, and a stranger.
     runtime.outputs = [
-      { filename: `${id8}_00002.mp3`, subfolder: 'audio\\stillsong' },
-      { filename: `${id8}_00001_.codes.bin`, subfolder: 'audio\\stillsong' },
-      { filename: 'deadbeef_00002.mp3', subfolder: 'audio\\stillsong' },
-      { filename: 'deadbeef_00001_.codes.bin', subfolder: 'audio/stillsong' },
+      { filename: `${id8}_00002.mp3`, subfolder: 'audio\\stillsong2' },
+      { filename: `${id8}_00001_.wav`, subfolder: 'audio\\stillsong2' },
+      { filename: 'deadbeef_00002.mp3', subfolder: 'audio\\stillsong2' },
+      { filename: 'deadbeef_00001_.wav', subfolder: 'audio/stillsong2' },
       { filename: 'not-ours.png', subfolder: '' },
-      { filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong' },
+      // Stillsong 1's output folder: never ours, whatever its prefix.
+      { filename: 'cafebabe_00001.mp3', subfolder: 'audio\\stillsong' },
+      { filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2' },
     ];
     // "Restart": a second engine over the same DB recovers the render, then sweeps.
     const engine2 = await Engine.create(ports);
     await flush();
     expect((await engine2.songs.byId(song.id))?.status).toBe('done');
     const removed = runtime.removedOutputs.map((f) => f.filename).sort();
-    expect(removed).toEqual(['deadbeef_00001_.codes.bin', 'deadbeef_00002.mp3', 'x_00001_.mp3'].sort());
-    expect(runtime.outputs.map((f) => f.filename).sort()).toEqual([`${id8}_00001_.codes.bin`, `${id8}_00002.mp3`, 'not-ours.png'].sort());
+    expect(removed).toEqual(['deadbeef_00001_.wav', 'deadbeef_00002.mp3', 'x_00001_.mp3'].sort());
+    expect(runtime.outputs.map((f) => f.filename).sort()).toEqual([`${id8}_00001_.wav`, `${id8}_00002.mp3`, 'cafebabe_00001.mp3', 'not-ours.png'].sort());
 
     // Deleting the song makes its leftovers orphans for the next boot.
     await engine2.deleteSong(song.id);
     expect(await engine2.sweepComfyOutputs()).toBe(2);
-    expect(runtime.outputs.map((f) => f.filename)).toEqual(['not-ours.png']);
+    expect(runtime.outputs.map((f) => f.filename).sort()).toEqual(['cafebabe_00001.mp3', 'not-ours.png']);
   });
 
   it("marks the song failed with ComfyUI's error message", async () => {
@@ -97,7 +99,7 @@ describe('Engine job pipeline', () => {
     expect(failed?.error).toBe('KSampler: OOM: out of memory');
   });
 
-  it('retries a failed song as the same song, with its prefix and parent intact', async () => {
+  it('retries a failed song as the same song, with its kept plan and parent intact', async () => {
     const { ports, world, clock } = makePorts();
     const engine = await Engine.create(ports);
     const events: string[] = [];
@@ -108,9 +110,10 @@ describe('Engine job pipeline', () => {
     await clock.advance(10_000);
     await flush();
 
-    // A same-seed remix that teacher-forces the parent, failing in ComfyUI.
+    // A same-seed remix that keeps the parent's melody, failing in ComfyUI.
     world.historyStatus = 'running';
-    const remix = await engine.enqueueSong({ ...spec(), lyrics: '[verse]\nhello\n\n[chorus]\nnew' }, parent.id, { songId: parent.id, frames: 100 });
+    const kept = (await engine.songs.byId(parent.id))!.planAbc!;
+    const remix = await engine.enqueueSong({ ...spec(), lyrics: '[verse]\nhello\n\n[chorus]\nnew', abc: kept }, parent.id);
     await flush();
     world.historyStatus = 'error';
     await clock.advance(10_000);
@@ -132,8 +135,8 @@ describe('Engine job pipeline', () => {
     const done = await engine.songs.byId(remix.id);
     expect(done?.status).toBe('done');
     expect(done?.parentId).toBe(parent.id);
-    expect(done?.prefixSongId).toBe(parent.id);
-    expect(done?.prefixFrames).toBe(100);
+    expect(done?.spec.abc).toBe(kept);
+    expect(done?.planAbc).toBe(kept);
     expect(done?.outputPath).toBe(`C:\\lib\\songs/${remix.id}.mp3`);
     expect(events.filter((e) => e === 'song_failed')).toHaveLength(1);
     expect(events.filter((e) => e === 'song_done')).toHaveLength(2);
@@ -263,80 +266,6 @@ describe('Engine job pipeline', () => {
 
     await engine.deleteSong(c.id);
     expect(await engine.photos.byId(photo.id)).toBeNull();
-  });
-
-  it('enhances a song as a new version: 80 steps, same seed and cap, the original untouched', async () => {
-    const { ports, world, clock, files } = makePorts();
-    world.stillsongNode = true;
-    const engine = await Engine.create(ports);
-    const photo = await engine.importPhoto('C:picssunset.jpg');
-    const original = await engine.enqueueSong({ ...spec(), photo });
-    await flush();
-    world.historyStatus = 'success';
-    await clock.advance(10_000);
-    const before = (await engine.songs.byId(original.id))!;
-    expect(before.spec.steps).toBe(RENDER_STEPS.fast);
-    expect(before.codesPath).toBeTruthy();
-    expect(canEnhance(before)).toBe(true);
-
-    await clock.advance(1_000);
-    world.historyStatus = 'running';
-    const take = await engine.enhanceSong(original.id);
-    expect(take.parentId).toBe(original.id);
-    expect(take.spec.steps).toBe(RENDER_STEPS.enhanced);
-    expect(take.spec.seed).toBe(before.spec.seed);
-    expect(take.spec.durationSec).toBe(before.spec.durationSec);
-    // The saved composition is forced in full: the same performance, sharper.
-    expect(take.prefixSongId).toBe(original.id);
-    expect(take.prefixFrames).toBeUndefined();
-    expect(isEnhanceOf(take, before)).toBe(true);
-    await flush();
-    expect(world.submittedGraph?.sample.inputs.steps).toBe(RENDER_STEPS.enhanced);
-
-    const doneEvents: string[] = [];
-    engine.on((e) => { if (e.kind === 'song_done') doneEvents.push(e.song.id); });
-    world.historyStatus = 'success';
-    await clock.advance(10_000);
-    await flush();
-
-    // Both versions stand: nothing of the original was touched.
-    const done = (await engine.songs.byId(take.id))!;
-    expect(doneEvents).toEqual([take.id]);
-    expect(done.status).toBe('done');
-    expect(done.parentId).toBe(original.id);
-    expect(canEnhance(done)).toBe(false);
-    const after = (await engine.songs.byId(original.id))!;
-    expect(after.status).toBe('done');
-    expect(after.outputPath).toBe(before.outputPath);
-    expect(files.removed).not.toContain(before.outputPath);
-    expect(files.removed).not.toContain(before.codesPath);
-    expect(await engine.photos.byId(photo.id)).not.toBeNull();
-    // The original can be enhanced again (it is a deliberate, confirmed act in the UI); the take cannot.
-    expect(canEnhance(after)).toBe(true);
-    await expect(engine.enhanceSong(take.id)).rejects.toThrow(/already/);
-  });
-
-  it('returns the pending enhanced take instead of queuing a second enhance of the same song', async () => {
-    const { ports, world, clock } = makePorts();
-    const engine = await Engine.create(ports);
-    const original = await engine.enqueueSong(spec());
-    await flush();
-    world.historyStatus = 'success';
-    await clock.advance(10_000);
-    world.historyStatus = 'running';
-    const first = await engine.enhanceSong(original.id);
-    await flush();
-    const second = await engine.enhanceSong(original.id);
-    expect(second.id).toBe(first.id);
-    expect((await engine.songs.list()).length).toBe(2);
-    // An ordinary remix in flight (different seed) is not mistaken for the enhance.
-    await engine.enqueueSong({ ...spec(), seed: '4242' }, original.id);
-    expect((await engine.enhanceSong(original.id)).id).toBe(first.id);
-    world.historyStatus = 'success';
-    await clock.advance(10_000);
-    await flush();
-    expect((await engine.songs.byId(first.id))?.status).toBe('done');
-    expect((await engine.songs.byId(original.id))?.status).toBe('done');
   });
 
   it('sweeps photos no song references at boot, keeping shared ones', async () => {

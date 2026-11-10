@@ -1,5 +1,5 @@
-Third-party license notices for Stillsong
-Stillsong itself is GPL-3.0 (see LICENSE). This file reproduces the license
+Third-party license notices for Stillsong 2
+Stillsong 2 itself is GPL-3.0 (see LICENSE). This file reproduces the license
 and notice texts of the open-source components compiled into the distributed
 application: the frontend packages bundled by Vite, every Rust crate linked
 into the binary, and the vendored fonts. Components downloaded at first run

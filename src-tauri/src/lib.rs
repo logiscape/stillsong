@@ -3,6 +3,7 @@ mod downloads;
 mod files;
 mod gpu;
 mod http;
+mod identity;
 mod manifest;
 mod supervisor;
 mod ws;
@@ -18,15 +19,11 @@ pub fn run() {
         .manage(downloads::DownloadState::default())
         .setup(|app| {
             let app_data = app.path().app_data_dir()?;
-            // Bundled ComfyUI-Stillsong overlay (comfy-overlay/ in the repo),
-            // seeded into comfy-data/custom_nodes before each ComfyUI spawn.
-            let overlay = app
-                .path()
-                .resource_dir()
-                .ok()
-                .map(|r| r.join("comfy-overlay").join("ComfyUI-Stillsong"));
+            // Default components dir: <local app data>\<identifier>\components,
+            // so it follows the identifier and never meets Stillsong 1's.
+            let components = app.path().app_local_data_dir()?.join("components");
             let sup =
-                supervisor::Supervisor::new(app_data, overlay).map_err(std::io::Error::other)?;
+                supervisor::Supervisor::new(app_data, components).map_err(std::io::Error::other)?;
             app.manage(sup);
             // Boot the studio in the background once setup has completed and
             // the installed components match this build's manifest. An

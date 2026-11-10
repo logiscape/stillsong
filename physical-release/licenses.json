@@ -28,13 +28,13 @@
       "note": "The win-cuda release zip carries only the LLVM OpenMP notice, not llama.cpp's own MIT license."
     },
     {
-      "id": "minimax-music3-license",
-      "appliesTo": ["music-dit", "music-text-encoder", "music-vae"],
-      "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/resolve/fbdf52fbaaca799592917417eb05f1899f1255ec/LICENSE",
-      "size": 7373,
-      "sha256": "b21d12df2adae59dad3fcf80c1d81492654c662342f497d9a9770198c9317e58",
-      "dest": "models/MiniMax-Music3/LICENSE.txt",
-      "note": "The Comfy-Org repack repository carries no license file (its apache-2.0 tag is a mislabel, see THIRD-PARTY-NOTICES.md); the weights are governed by this Community License from the original model repository. Its section 1 requires the notice to accompany every copy."
+      "id": "yue2-model-license",
+      "appliesTo": ["music-checkpoint"],
+      "url": "https://raw.githubusercontent.com/multimodal-art-projection/YuE/cbb3b060725ddd95ac6e6237cfb709e153da5988/MODEL_LICENSE",
+      "size": 23876,
+      "sha256": "c7a0e99360555513ff56815b5dbbc8f0b27a3ad762ceaeeab6838baea9743b3a",
+      "dest": "models/YuE2/MODEL_LICENSE.txt",
+      "note": "The YuE2 weight license (CC BY-NC 4.0, the unmodified legal code included, plus the authors' 2026-09-16 individual-creator permission), pinned at the commit that last changed it. Neither Hugging Face repository (m-a-p/YuE2-3B, Comfy-Org/YuE2) carries more than a cc-by-nc-4.0 tag. CC BY-NC 4.0 requires attribution and this text with every copy of the weights, and the permission does not extend to commercial redistribution or sale of the weights: the disc must be given away, never sold."
     },
     {
       "id": "apache-2.0",

@@ -46,8 +46,10 @@ export interface FakeWorld {
   /** Every chat request body, in order. */
   llmCalls: { messages: { role: string; content: unknown }[]; response_format?: unknown; chat_template_kwargs?: unknown }[];
   llmHealthy: boolean;
-  /** When true, the fake ComfyUI has the Stillsong overlay node and emits a codes file. */
-  stillsongNode: boolean;
+  /** PreviewAny text a successful prompt reports for `plan_out` (only if the graph wrote a plan). */
+  planText: string;
+  /** PreviewAny text for `seconds_out`: what YuE2 reports it wrote. */
+  secondsText: string;
 }
 
 export function fakeHttp(): FakeWorld {
@@ -59,7 +61,8 @@ export function fakeHttp(): FakeWorld {
     llmResponses: [],
     llmCalls: [],
     llmHealthy: true,
-    stillsongNode: false,
+    planText: 'X:1\nK:C\n% verse\nV: Vocal\nc4d4e4f4|',
+    secondsText: '42.4',
     http: null!,
   };
   w.http = {
@@ -68,7 +71,7 @@ export function fakeHttp(): FakeWorld {
       if (url.endsWith('/health')) return w.llmHealthy ? { status: 200, body: '{"status":"ok"}' } : { status: 503, body: '{}' };
       if (url.includes('/history/')) {
         const id = url.split('/').pop()!;
-        if (w.historyStatus === 'down') throw new Error('connect ECONNREFUSED 127.0.0.1:17800');
+        if (w.historyStatus === 'down') throw new Error('connect ECONNREFUSED 127.0.0.1:17900');
         if (w.historyStatus === 'running') return { status: 200, body: '{}' };
         if (w.historyStatus === 'error') {
           return {
@@ -79,22 +82,16 @@ export function fakeHttp(): FakeWorld {
           };
         }
         const outputs: Record<string, unknown> = {
-          save: { audio: [{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong', type: 'output' }] },
+          save: { audio: [{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2', type: 'output' }] },
+          seconds_out: { text: [w.secondsText] },
         };
-        if (w.stillsongNode) {
-          outputs.encode = { stillsong_codes: [{ filename: 'x_00001_.codes.bin', subfolder: 'audio\\stillsong', type: 'output' }] };
-        }
+        if (w.submittedGraph?.plan_out) outputs.plan_out = { text: [w.planText] };
         return {
           status: 200,
           body: JSON.stringify({
             [id]: { status: { status_str: 'success', completed: true, messages: [] }, outputs },
           }),
         };
-      }
-      if (url.includes('/object_info/StillsongMusic3TextEncode')) {
-        return w.stillsongNode
-          ? { status: 200, body: JSON.stringify({ StillsongMusic3TextEncode: { input: {} } }) }
-          : { status: 404, body: '' };
       }
       return { status: 404, body: '' };
     },
@@ -133,7 +130,7 @@ export function fakeFiles(): FileStore & {
     downloaded: [] as string[],
     removed: [] as string[],
     written: [] as { relPath: string; b64: string }[],
-    /** Returned by readBase64 when set (e.g. an SSC1 blob for prefix tests). */
+    /** Returned by readBase64 when set (e.g. an examples manifest). */
     base64Content: null as string | null,
     /** Per-path overrides, ahead of base64Content. */
     base64ByPath: {} as Record<string, string>,

@@ -20,9 +20,9 @@ $ErrorActionPreference = 'Stop'
 $setupDir = $PSScriptRoot
 $discRoot = Split-Path -Parent $setupDir
 $manifest = Get-Content -Raw (Join-Path $setupDir 'disc-manifest.json') | ConvertFrom-Json
-$appData = Join-Path $env:APPDATA 'com.logiscape.stillsong'
+$appData = Join-Path $env:APPDATA 'com.logiscape.stillsong2'
 $pointer = Join-Path $appData 'components-dir.txt'
-$defaultDest = Join-Path $env:LOCALAPPDATA 'com.logiscape.stillsong\components'
+$defaultDest = Join-Path $env:LOCALAPPDATA 'com.logiscape.stillsong2\components'
 $wizardFree = [long]$manifest.wizardFreeBytes
 
 function GB($b) { '{0:N1} GB' -f ($b / 1e9) }
@@ -170,7 +170,7 @@ if (-not $alreadySetUp) {
   # uninstaller reads). The wizard will show this folder pre-selected.
   New-Item -ItemType Directory -Force -Path $appData | Out-Null
   [IO.File]::WriteAllText($pointer, $Destination, (New-Object Text.UTF8Encoding $false))
-  & reg add 'HKCU\Software\Logiscape\Stillsong' /v ComponentsDir /t REG_SZ /d $Destination /f | Out-Null
+  & reg add 'HKCU\Software\Logiscape\Stillsong 2' /v ComponentsDir /t REG_SZ /d $Destination /f | Out-Null
 }
 
 # --- installer --------------------------------------------------------------

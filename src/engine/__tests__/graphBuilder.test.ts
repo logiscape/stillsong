@@ -1,38 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraph, NODE_PHASES } from '@engine/comfy/graphBuilder';
-import { defaultSpec, MODEL_FILES, RENDER_STEPS } from '@engine/domain/types';
+import { defaultSpec, MAX_DURATION_SEC, YUE2_CHECKPOINT } from '@engine/domain/types';
 import { validateSpec } from '@engine/domain/validate';
-import { capCeiling, driverShortfall, hardwareTier, renderCap } from '@engine/domain/duration';
+import { driverShortfall, hardwareTier, renderCap } from '@engine/domain/duration';
 
 describe('buildGraph', () => {
-  const spec = { ...defaultSpec(), caption: 'Global Metadata: x\n\nVocal Details: y\n\nArrangement: z', lyrics: '[verse]\nhi', seed: '222', targetSec: 20, durationSec: 20 };
+  const spec = { ...defaultSpec(), caption: 'Global Metadata: x\n\nVocal Details: y\n\nArrangement: z', lyrics: '[verse]\nhi', seed: '222', targetSec: 20 };
 
-  it('emits the flat Music 3 graph with stable ids and shared seed', () => {
-    const { graph } = buildGraph(spec, 'audio/stillsong/abcd1234');
-    expect(Object.keys(graph).sort()).toEqual(['clip', 'decode', 'encode', 'latent', 'neg', 'sample', 'save', 'unet', 'vae'].sort());
-    expect(graph.unet.inputs.unet_name).toBe(MODEL_FILES.ditFp16);
-    expect(graph.clip.inputs).toMatchObject({ clip_name: MODEL_FILES.textEncoder, type: 'minimax' });
-    expect(graph.encode.inputs).toMatchObject({ clip: ['clip', 0], seed: 222, max_duration: 20, cfg_scale: 1.7, top_k: 50 });
-    expect(graph.sample.inputs).toMatchObject({ seed: 222, steps: RENDER_STEPS.fast, cfg: 1.7, sampler_name: 'euler', scheduler: 'simple' });
-    expect(graph.latent.inputs.seconds).toEqual(['encode', 1]);
-    expect(graph.neg.inputs.conditioning).toEqual(['encode', 0]);
-    expect(graph.decode.class_type).toBe('VAEDecodeAudioTiled');
-    expect(graph.save.inputs).toMatchObject({ filename_prefix: 'audio/stillsong/abcd1234', format: 'mp3', 'format.quality': 'V0' });
+  it('emits the flat YuE2 graph (the official template) with stable ids and one shared seed', () => {
+    const { graph } = buildGraph(spec, 'audio/stillsong2/abcd1234');
+    expect(Object.keys(graph).sort()).toEqual(['ckpt', 'decode', 'latent', 'neg', 'perform', 'plan', 'plan_out', 'sample', 'save', 'seconds_out'].sort());
+    expect(graph.ckpt).toEqual({ class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: YUE2_CHECKPOINT } });
+    expect(graph.plan.inputs).toMatchObject({ clip: ['ckpt', 1], style: spec.caption, lyrics: spec.lyrics, seed: 222, mode: 'full', max_abc_tokens: 8192 });
+    expect(graph.plan_out.inputs.source).toEqual(['plan', 0]);
+    expect(graph.perform.inputs).toMatchObject({
+      clip: ['ckpt', 1], style: spec.caption, lyrics: spec.lyrics, abc: ['plan', 0], seed: 222, mode: 'full', max_duration: MAX_DURATION_SEC,
+    });
+    expect(graph.seconds_out.inputs.source).toEqual(['perform', 1]);
+    expect(graph.latent).toEqual({ class_type: 'EmptyYuE2LatentAudio', inputs: { seconds: ['perform', 1], batch_size: 1 } });
+    expect(graph.neg.inputs.conditioning).toEqual(['perform', 0]);
+    expect(graph.sample.inputs).toMatchObject({ model: ['ckpt', 0], seed: 222, steps: 32, cfg: 1, sampler_name: 'dpm_2', scheduler: 'sgm_uniform', denoise: 1 });
+    expect(graph.decode).toEqual({ class_type: 'VAEDecodeAudio', inputs: { samples: ['sample', 0], vae: ['ckpt', 2] } });
+    expect(graph.save.inputs).toMatchObject({ filename_prefix: 'audio/stillsong2/abcd1234', format: 'mp3', 'format.quality': 'V0' });
     for (const id of Object.keys(graph)) expect(NODE_PHASES[id]).toBeTruthy();
   });
 
-  it('switches to the plain decoder when tiled is off and snaps duration to 0.04s', () => {
-    const { graph } = buildGraph({ ...spec, tiledDecode: false, durationSec: 33.333, quality: '320k' }, 'p');
-    expect(graph.decode.class_type).toBe('VAEDecodeAudio');
-    expect(graph.encode.inputs.max_duration).toBeCloseTo(33.32, 5);
+  it('performs a given plan verbatim instead of writing one', () => {
+    const { graph } = buildGraph({ ...spec, abc: 'X:1\nK:C\nc4|' }, 'p');
+    expect(graph.plan).toBeUndefined();
+    expect(graph.plan_out).toBeUndefined();
+    expect(graph.perform.inputs.abc).toBe('X:1\nK:C\nc4|');
+  });
+
+  it('melody-only plans pass the mode to both nodes; no plan at all sends an empty score', () => {
+    const melody = buildGraph({ ...spec, planMode: 'melody' }, 'p').graph;
+    expect(melody.plan.inputs.mode).toBe('melody');
+    expect(melody.perform.inputs.mode).toBe('melody');
+    const off = buildGraph({ ...spec, planMode: 'off', abc: 'ignored' }, 'p').graph;
+    expect(off.plan).toBeUndefined();
+    expect(off.perform.inputs.abc).toBe('');
+  });
+
+  it('snaps the cap to 0.04 s and passes quality through', () => {
+    const { graph } = buildGraph({ ...spec, durationSec: 33.333, quality: '320k' }, 'p');
+    expect(graph.perform.inputs.max_duration).toBeCloseTo(33.32, 5);
     expect(graph.save.inputs['format.quality']).toBe('320k');
   });
 
   it('sends empty lyrics for instrumental songs without tags', () => {
     const { graph } = buildGraph({ ...spec, instrumental: true, lyrics: '   ' }, 'p');
-    expect(graph.encode.inputs.lyrics).toBe('');
+    expect(graph.perform.inputs.lyrics).toBe('');
     const tagged = buildGraph({ ...spec, instrumental: true, lyrics: '[intro]\n[instrumental]\n[outro]' }, 'p');
-    expect(tagged.graph.encode.inputs.lyrics).toBe('[intro]\n[instrumental]\n[outro]');
+    expect(tagged.graph.perform.inputs.lyrics).toBe('[intro]\n[instrumental]\n[outro]');
   });
 });
 
@@ -40,15 +59,16 @@ describe('validateSpec', () => {
   it('rejects out-of-range durations and bad seeds', () => {
     const base = { ...defaultSpec(), caption: 'c' };
     expect(validateSpec({ ...base, durationSec: 5 }).some((i) => i.severity === 'error')).toBe(true);
-    expect(validateSpec({ ...base, durationSec: 361 }).some((i) => i.severity === 'error')).toBe(true);
+    expect(validateSpec({ ...base, durationSec: 901 }).some((i) => i.severity === 'error')).toBe(true);
+    expect(validateSpec({ ...base, durationSec: MAX_DURATION_SEC }).filter((i) => i.severity === 'error')).toEqual([]);
     expect(validateSpec({ ...base, seed: '-1' }).some((i) => i.severity === 'error')).toBe(true);
     expect(validateSpec({ ...base, seed: '18446744073709551615' }).filter((i) => i.severity === 'error')).toEqual([]);
     expect(validateSpec({ ...base, seed: '18446744073709551616' }).some((i) => i.severity === 'error')).toBe(true);
-    expect(validateSpec({ ...base, caption: '<|audio_end|>' }).some((i) => i.severity === 'error')).toBe(true);
+    expect(validateSpec({ ...base, planMode: 'bogus' as never }).some((i) => i.severity === 'error')).toBe(true);
   });
 });
 
-describe('renderCap', () => {
+describe('renderCap (the co-writer\'s length budget, unchanged from Stillsong 1)', () => {
   it('adds headroom over max(target, lyric estimate), never below target, capped at 300', () => {
     expect(renderCap(120, '')).toBe(280); // 120 × 2 + 40
     expect(renderCap(30, '[verse]\n' + 'la\n'.repeat(20))).toBe(220); // 20 lines × 4.5 s = 90 s > target
@@ -64,19 +84,13 @@ describe('renderCap', () => {
 });
 
 describe('hardware tiers', () => {
-  it('derives tier and cap ceiling from VRAM/RAM', () => {
+  it('derives the tier from VRAM/RAM', () => {
     expect(hardwareTier({ vendor: 'nvidia', vramMb: 16_303, ramMb: 65_536 })).toBe('fast');
     expect(hardwareTier({ vendor: 'nvidia', vramMb: 12_288, ramMb: 32_768 })).toBe('patient');
     // 32 GB RAM is a recommendation, not a gate (pagefile-backed commit).
     expect(hardwareTier({ vendor: 'nvidia', vramMb: 12_288, ramMb: 16_384 })).toBe('patient');
     expect(hardwareTier({ vendor: 'nvidia', vramMb: 6_144, ramMb: 65_536 })).toBe('unsupported');
     expect(hardwareTier({ vendor: 'amd', vramMb: 24_576, ramMb: 65_536 })).toBe('unsupported');
-    // One ceiling for every supported tier (measured: 300 s caps complete
-    // even at emulated 8 GB) — and one KV pin, so codes stay bit-compatible
-    // across hardware tiers.
-    expect(capCeiling(16_303)).toBe(300);
-    expect(capCeiling(12_288)).toBe(300);
-    expect(capCeiling(8_192)).toBe(300);
   });
 
   it('flags a driver older than the CUDA 13 runtimes need', () => {

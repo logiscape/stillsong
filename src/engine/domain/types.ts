@@ -1,4 +1,4 @@
-// Domain model for Stillsong. A Song is one render request (the
+// Domain model for Stillsong 2. A Song is one render request (the
 // full spec is denormalized as JSON on the row so re-run/remix is trivial).
 
 export type VocalPref = 'any' | 'female' | 'male' | 'instrumental';
@@ -6,12 +6,11 @@ export type VocalPref = 'any' | 'female' | 'male' | 'instrumental';
 export type Mp3Quality = 'V0' | '128k' | '320k';
 
 /**
- * How new songs are made: sampler steps for the audio pass. Steps touch only
- * the diffusion stage (timbre, clarity) — the composition is fixed by the
- * seed — so an 'enhanced' re-render of a 'fast' song is the same song, clearer.
+ * YuE2 melody planning (YuE2GenerateABC `mode`): `full` writes a melody +
+ * chord score before the song is performed, `melody` a melody-only score,
+ * `off` performs straight from caption + lyrics with no score.
  */
-export type RenderMethod = 'fast' | 'enhanced';
-export const RENDER_STEPS: Record<RenderMethod, number> = { fast: 40, enhanced: 80 };
+export type PlanMode = 'full' | 'melody' | 'off';
 
 export interface PhotoAsset {
   id: string;
@@ -38,26 +37,34 @@ export interface SongSpec {
   idea: string;
   /** Inspiration photo, if any. Never sent to ComfyUI. */
   photo?: PhotoAsset;
+  /** The style text YuE2 performs to (the co-writer's three-section caption). */
   caption: string;
   lyrics: string;
   instrumental: boolean;
-  /** What the user asked for / the writer wrote to: "about this long". 10..300. */
+  /** What the user asked for / the writer wrote to: "about this long". 10..360. */
   targetSec: number;
   /**
-   * Render cap sent to ComfyUI as max_duration: target + headroom (see
-   * domain/duration.ts). The model ends the song on its own before this; if it
-   * doesn't, the song is truncated (song.hitCeiling). 10..360.
+   * max_duration sent to YuE2GenerateMusic: the most it may write. Fixed at
+   * MAX_DURATION_SEC for every song — the value changes the performance for
+   * the same seed, so it must never vary between a song and its remixes. The
+   * model ends the song on its own before this; if it doesn't, the song is
+   * truncated (song.hitCeiling).
    */
   durationSec: number;
   /** Stored as a string end-to-end: ComfyUI seeds can exceed 2^53. */
   seed: string;
-  ditFile: string;
-  tiledDecode: boolean;
+  /** The YuE2 checkpoint (CheckpointLoaderSimple ckpt_name). */
+  checkpoint: string;
   steps: number;
   cfg: number;
-  /** cfg_scale on the AR encoder (composition guidance). */
-  encodeCfg: number;
-  topK: number;
+  sampler: string;
+  scheduler: string;
+  planMode: PlanMode;
+  /**
+   * A melody plan (ABC score) to perform verbatim — a kept or hand-edited plan
+   * on a remix. Empty/undefined: write a new one (unless planMode is 'off').
+   */
+  abc?: string;
   quality: Mp3Quality;
   /** Co-writer controls, kept so a remix starts from the same brief. */
   vocalPref: VocalPref;
@@ -73,43 +80,21 @@ export interface Song {
   spec: SongSpec;
   status: SongStatus;
   outputPath?: string;
-  /** Seconds the AR model actually wrote (from the encode node), when known. */
+  /** Seconds YuE2 actually wrote (the music node's `seconds` output), when known. */
   actualSec?: number;
   /**
-   * True when the composer ran into `durationSec` without emitting its own
-   * ending (<|audio_end|>) — the song was truncated mid-phrase. Undefined when
-   * the render was tracked without WebSocket progress (unknown).
+   * True when the composer ran into `durationSec` without writing its own
+   * ending — the song was truncated. Undefined when unknown.
    */
   hitCeiling?: boolean;
+  /** The melody plan this take performed (generated, kept or hand-edited); absent for planMode 'off'. */
+  planAbc?: string;
   comfyPromptId?: string;
   /** Wall-clock job time (submit through harvest), recorded when the render finishes. */
   renderMs?: number;
   error?: string;
   /** re-run / new take / remix lineage */
   parentId?: string;
-  /**
-   * SSC1 composition blob harvested with the audio (library/songs/<id>.codes.bin)
-   * when the render ran through the Stillsong overlay node. The code matrix is
-   * the composition itself; it makes "Let it finish" and same-seed edits exact.
-   */
-  codesPath?: string;
-  /** Render instruction: teacher-force this song's saved composition... */
-  prefixSongId?: string;
-  /** ...for this many frames (undefined = the whole matrix). Meaningless without prefixSongId. */
-  prefixFrames?: number;
-}
-
-/** Whether "Enhance quality" has anything to offer: a finished song made with fewer steps than 'enhanced'. */
-export function canEnhance(song: Song): boolean {
-  return song.status === 'done' && !!song.outputPath && song.spec.steps < RENDER_STEPS.enhanced;
-}
-
-/**
- * Is `take` an "Enhance quality" version of `song`: its child, the same seed
- * (so the same performance), at the 'enhanced' step count or more.
- */
-export function isEnhanceOf(take: Song, song: Song): boolean {
-  return take.parentId === song.id && take.spec.seed === song.spec.seed && take.spec.steps >= RENDER_STEPS.enhanced;
 }
 
 export type JobState = 'queued' | 'submitted' | 'running' | 'harvesting' | 'done' | 'failed' | 'cancelled';
@@ -126,30 +111,39 @@ export interface Job {
   error?: string;
 }
 
-export const MODEL_FILES = {
-  ditFp16: 'minimax_music3_dit_fp16.safetensors',
-  ditInt8: 'minimax_music3_dit_int8_convrot.safetensors',
-  textEncoder: 'minimax_music3_text_encoder_pruned_int8_convrot.safetensors',
-  vae: 'minimax_music3_dav.safetensors',
-} as const;
+/** The pinned YuE2 checkpoint (components.json `music-checkpoint`). */
+export const YUE2_CHECKPOINT = 'yue2_3b_int8_convrot.safetensors';
 
+/** Target-length bounds (the co-writer's "about this long"). */
 export const DURATION = { min: 10, max: 360, uiMin: 30, uiMax: 300, default: 120, draft: 40 } as const;
 
-/** Render-cap headroom over the target: cap = need × headroom + pad, ≤ max (VRAM: 360 s nearly exhausts 16 GB). */
-// Generous on purpose: the cap costs no render time and no quality — only the
-// encoder's pre-allocated KV cache — and a roomy cap is what lets the composer
-// finish long takes (interludes, outros) instead of truncating them.
+/**
+ * max_duration for every song (the user's tested workflow value). Measured
+ * 2026-11-10 on an RTX 5080: v1-length lyrics end on their own at 215–330 s,
+ * 300 s truncated 2 in 8; a 9-tag instrumental ran to 404 s at 500. The value
+ * also sizes the music KV cache, so changing it changes every same-seed
+ * performance — never vary it per song.
+ */
+export const MAX_DURATION_SEC = 500;
+
+/** YuE2 writes 25 music tokens per second of audio (comfy/text_encoders/yue2.py FRAMES_PER_SECOND). */
+export const AUDIO_FRAMES_PER_SECOND = 25;
+
+/**
+ * The co-writer's length budget (cowriter lint + repair, unchanged from
+ * Stillsong 1 so Gemma writes exactly as it did there). Not sent to ComfyUI.
+ */
 export const CAP = { headroom: 2, pad: 40, max: 300 } as const;
 
-/** Hard limit from comfy/ldm/minimax_music/ar.py: MAX_AUDIO_FRAMES = 9000 at 25 fps. */
-export const AUDIO_FRAMES_PER_SECOND = 25;
+/** YuE2 defaults (the official audio_yue2_text2music template). */
+export const RENDER_DEFAULTS = { steps: 32, cfg: 1, sampler: 'dpm_2', scheduler: 'sgm_uniform', planMode: 'full' as PlanMode };
 
 export function randomSeed(): string {
   // < 2^53 so Number(seed) is exact when it reaches the graph.
   return String(Math.floor(Math.random() * 9_007_199_254_740_000));
 }
 
-export function defaultSpec(ditFile: string = MODEL_FILES.ditFp16): SongSpec {
+export function defaultSpec(checkpoint: string = YUE2_CHECKPOINT): SongSpec {
   return {
     title: '',
     idea: '',
@@ -157,14 +151,14 @@ export function defaultSpec(ditFile: string = MODEL_FILES.ditFp16): SongSpec {
     lyrics: '',
     instrumental: false,
     targetSec: DURATION.default,
-    durationSec: Math.min(CAP.max, Math.round(DURATION.default * CAP.headroom + CAP.pad)),
+    durationSec: MAX_DURATION_SEC,
     seed: randomSeed(),
-    ditFile,
-    tiledDecode: true,
-    steps: RENDER_STEPS.fast,
-    cfg: 1.7,
-    encodeCfg: 1.7,
-    topK: 50,
+    checkpoint,
+    steps: RENDER_DEFAULTS.steps,
+    cfg: RENDER_DEFAULTS.cfg,
+    sampler: RENDER_DEFAULTS.sampler,
+    scheduler: RENDER_DEFAULTS.scheduler,
+    planMode: RENDER_DEFAULTS.planMode,
     quality: 'V0',
     vocalPref: 'any',
   };

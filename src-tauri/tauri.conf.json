@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Stillsong",
-  "version": "1.1.0",
-  "identifier": "com.logiscape.stillsong",
+  "productName": "Stillsong 2",
+  "version": "2.0.0",
+  "identifier": "com.logiscape.stillsong2",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1432",
+    "devUrl": "http://localhost:1433",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Stillsong",
+        "title": "Stillsong 2",
         "width": 1440,
         "height": 940,
         "minWidth": 1100,
@@ -33,7 +33,6 @@
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
     "resources": {
-      "../comfy-overlay/ComfyUI-Stillsong/": "comfy-overlay/ComfyUI-Stillsong/",
       "../examples/": "example-songs/"
     },
     "windows": {

@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { driverShortfall, hardwareTier } from '@engine/domain/duration';
+import { YUE2_CHECKPOINT } from '@engine/domain/types';
 import { finishSetup, getEngine, saveSettings, useAppState } from '@state/store';
 import { Button } from '@ui/ds/Button';
 import { Icon } from '@ui/ds/Icon';
@@ -46,7 +47,7 @@ const GB = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
 /** Plain-language grouping of the manifest for the consent screen. */
 const PIECES = [
   { icon: 'pen-line', label: 'A songwriter', ids: ['gemma-model', 'gemma-mmproj'] },
-  { icon: 'music', label: 'A composer and its instruments', ids: ['comfyui', 'music-dit', 'music-text-encoder', 'music-vae'] },
+  { icon: 'music', label: 'A composer and its instruments', ids: ['comfyui', 'music-checkpoint'] },
   { icon: 'audio-lines', label: 'A sound engine', ids: ['uv', 'python-dist', 'llama-cpp', 'llama-cudart', ...WHEELS.map((w) => w.filename)] },
 ];
 
@@ -132,7 +133,7 @@ export function SetupScreen({ mode = 'first-run' }: { mode?: 'first-run' | 'upda
   const chooseDir = async () => {
     const sel = await open({ directory: true, multiple: false }).catch(() => null);
     if (typeof sel !== 'string') return;
-    const dir = `${sel}\\Stillsong components`;
+    const dir = `${sel}\\Stillsong 2 components`;
     await invoke('runtime_set_components_dir', { dir });
     setComponentsDir(dir);
     const free = await invoke<number | null>('components_free_space', { path: sel }).catch(() => null);
@@ -205,9 +206,9 @@ export function SetupScreen({ mode = 'first-run' }: { mode?: 'first-run' | 'upda
     try {
       await invoke('runtime_start_comfy');
       setWarm((w) => ({ ...w!, studio: true }));
-      const info = await engine.comfy.objectInfo('MiniMaxMusic3TextEncode').catch(() => ({}));
-      const dits = await engine.comfy.availableModels('UNETLoader', 'unet_name').catch(() => [] as string[]);
-      const ok = Object.keys(info).length > 0 && dits.some((d) => d.includes('minimax_music3_dit'));
+      const info = await engine.comfy.objectInfo('YuE2GenerateMusic').catch(() => ({}));
+      const ckpts = await engine.comfy.availableModels('CheckpointLoaderSimple', 'ckpt_name').catch(() => [] as string[]);
+      const ok = Object.keys(info).length > 0 && ckpts.includes(YUE2_CHECKPOINT);
       setWarm((w) => ({ ...w!, instruments: ok }));
       await engine.vram.acquireForLlm();
       setWarm((w) => ({ ...w!, writer: true }));
@@ -295,7 +296,9 @@ export function SetupScreen({ mode = 'first-run' }: { mode?: 'first-run' | 'upda
           </div>
         </Panel>
         <p style={{ font: 'var(--ui-xs)', color: 'var(--text-faint)', marginTop: 'var(--space-5)', maxWidth: '58ch' }}>
-          The songwriter is Gemma, under the Apache 2.0 license. The composer is MiniMax-Music3, under the MiniMax-Music3 Community License.
+          The songwriter is Gemma, under the Apache 2.0 license. The composer is YuE2, by M-A-P, under CC BY-NC 4.0 with
+          M-A-P's additional creator permission: personal users, content creators and musicians may monetize the songs they
+          make, while companies need a commercial license from M-A-P.
         </p>
       </Shell>
     );

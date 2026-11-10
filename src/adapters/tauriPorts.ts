@@ -156,7 +156,7 @@ export async function createTauriPorts(): Promise<Ports> {
     files: new TauriFiles(),
     clock: new RealClock(),
     // The Rust supervisor owns child processes and URLs. In dev it honours
-    // STILLSONG_COMFY_URL / STILLSONG_LLM_URL / STILLSONG_COMPONENTS to point
+    // STILLSONG2_COMFY_URL / STILLSONG2_LLM_URL / STILLSONG2_COMPONENTS to point
     // at externally managed services instead of spawning.
     runtime: new TauriRuntime(),
   };

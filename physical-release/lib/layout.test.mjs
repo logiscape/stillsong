@@ -83,11 +83,13 @@ test('SHA256SUMS round-trips', () => {
   assert.throws(() => parseSums('nonsense'));
 });
 
-test('fit report knows a single-layer disc is tight for the current manifest', () => {
+test('fit report: the Stillsong 2 manifest fits a single-layer disc with room to spare', () => {
   const report = fitReport(componentsBytes(real));
   const sl = report.find((m) => m.id === 'bd-r');
   const dl = report.find((m) => m.id === 'bd-r-dl');
   assert.ok(dl.fits, 'components alone must fit a dual-layer disc');
-  assert.ok(sl.headroom < 1e9, 'if single-layer suddenly has >1 GB spare, the manifest shrank — re-check the README table');
+  // 13.2 GB of components (YuE2 int8 replaced Stillsong 1's 14.3 GB of MiniMax weights).
+  assert.ok(sl.fits, 'components must fit a single-layer disc');
+  assert.ok(sl.headroom > 8e9 && sl.headroom < 12e9, 'single-layer headroom moved by more than a few GB — re-check the README table');
   assert.equal(MEDIA[0].bytes, 25_025_314_816);
 });

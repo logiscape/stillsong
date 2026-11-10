@@ -56,7 +56,7 @@ export function App(): React.ReactElement {
       <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
         {s.lastError
           ? <div style={{ maxWidth: 480, font: 'var(--ui-md)', color: 'var(--text-body)' }}>{s.lastError}</div>
-          : <span style={{ font: 'var(--epigraph)', color: 'var(--text-quiet)' }}>Stillsong</span>}
+          : <span style={{ font: 'var(--epigraph)', color: 'var(--text-quiet)' }}>Stillsong 2</span>}
       </div>
     );
   }

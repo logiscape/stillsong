@@ -21,7 +21,7 @@ pub fn files_library_dir(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 /// Where the bundled example songs live (examples/ in the repo, shipped as
-/// the `example-songs` Tauri resource next to the ComfyUI overlay — not
+/// the `example-songs` Tauri resource — not
 /// `examples`, which in dev would share target/debug/examples with cargo's
 /// own example binaries). None when a build carries no examples; the engine
 /// then simply leaves a new library empty.
@@ -132,9 +132,8 @@ pub async fn files_make_thumbnail(
 }
 
 /// Copies a song out of the library to a user-chosen destination (Save As).
-/// The exported copy gets an ID3 comment disclosing machine generation — the
-/// MiniMax-Music3 AUP requires publicly shared AI content to be disclosed, so
-/// the file carries it automatically wherever it travels.
+/// The exported copy gets an ID3 comment disclosing machine generation, so the
+/// file carries the disclosure automatically wherever it travels.
 #[tauri::command]
 pub async fn files_export(src_path: String, dest_path: String) -> Result<String, String> {
     let dest = PathBuf::from(&dest_path);
@@ -153,7 +152,7 @@ pub async fn files_export(src_path: String, dest_path: String) -> Result<String,
         tag.add_frame(id3::frame::Comment {
             lang: "eng".into(),
             description: "AI disclosure".into(),
-            text: "AI-generated music (MiniMax-Music3), created locally with Stillsong.".into(),
+            text: "AI-generated music (YuE2), created locally with Stillsong 2.".into(),
         });
         let _ = tag.write_to_path(&tag_dest, id3::Version::Id3v24);
     })

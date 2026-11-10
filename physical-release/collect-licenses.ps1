@@ -13,7 +13,7 @@
     licenses/python/      per-wheel license texts pulled from each wheel's
                           .dist-info (METADATA when a wheel carries no file),
                           plus an INDEX.md
-    licenses/models/      MiniMax-Music3 Community License, Apache-2.0 for
+    licenses/models/      YuE2 weight license (CC BY-NC 4.0 + creator permission), Apache-2.0 for
     licenses/runtimes/NVIDIA-CUDA/  Gemma 4, and the CUDA EULA — fetched from
                           the pinned URLs in licenses.json and hash-checked
 
@@ -176,16 +176,21 @@ Set-Content -Encoding utf8 (Join-Path $OutDir 'models\Gemma-4\NOTICE.txt') @(
   'weights unmodified; the pinned files and hashes are listed in',
   'setup/components.json on this disc.'
 )
-Set-Content -Encoding utf8 (Join-Path $OutDir 'models\MiniMax-Music3\NOTICE.txt') @(
-  'MiniMax-Music3 weights (Comfy-Org repack of MiniMaxAI/MiniMax-Music3)',
-  'https://huggingface.co/Comfy-Org/MiniMax-Music-3',
-  'https://huggingface.co/MiniMaxAI/MiniMax-Music3',
+Set-Content -Encoding utf8 (Join-Path $OutDir 'models\YuE2\NOTICE.txt') @(
+  'YuE2-3B weights by the YuE2 authors (M-A-P), int8 "convrot" quantization',
+  'repackaged for ComfyUI by Comfy-Org (checkpoints/yue2_3b_int8_convrot.safetensors)',
+  'https://huggingface.co/m-a-p/YuE2-3B',
+  'https://huggingface.co/Comfy-Org/YuE2',
+  'https://github.com/multimodal-art-projection/YuE',
   '',
-  'Governed by the MiniMax-Music3 Community License in LICENSE.txt beside',
-  'this notice, whose section 1 requires that notice to accompany every copy.',
-  'Stillsong is a free, non-commercial GPL application; it credits',
-  'MiniMax-Music3 on its About screen and writes the machine-generated',
-  'disclosure the license asks for into every exported song.'
+  'Licensed under CC BY-NC 4.0 with the authors'' additional individual-creator',
+  'permission; the full terms, including the unmodified CC BY-NC 4.0 legal code,',
+  'are in MODEL_LICENSE.txt beside this notice. The weights on this disc are the',
+  'Comfy-Org repackaging, unmodified by Stillsong; the pinned file and its hash',
+  'are listed in setup/components.json. This disc is distributed free of charge:',
+  'the creator permission does not extend to commercial redistribution or sale',
+  'of the weights. Stillsong 2 credits YuE2 on its About screen and writes an',
+  'AI-generated disclosure into every exported song.'
 )
 Set-Content -Encoding utf8 (Join-Path $OutDir 'runtimes\NVIDIA-CUDA\NOTICE.txt') @(
   'NVIDIA CUDA runtime libraries (cudart and companions)',
@@ -214,7 +219,7 @@ Set-Content -Encoding utf8 (Join-Path $OutDir 'README.md') @(
   '| `Stillsong/` | The app, its bundled libraries and fonts, the example songs | GPL-3.0; per-library MIT/Apache/ISC/OFL; CC BY 4.0 |',
   '| `runtimes/` | uv, CPython (python-build-standalone), ComfyUI, llama.cpp, CUDA runtime | MIT/Apache-2.0, PSF-2.0, GPL-3.0, MIT, NVIDIA CUDA EULA |',
   '| `python/` | Every Python wheel in the wheelhouse (PyTorch and ComfyUI''s dependencies) | Per package, see `python/INDEX.md` |',
-  '| `models/` | MiniMax-Music3 and Gemma 4 weights | MiniMax-Music3 Community License; Apache-2.0 |',
+  '| `models/` | YuE2 and Gemma 4 weights | CC BY-NC 4.0 with the YuE2 creator permission; Apache-2.0 |',
   '',
   'Corresponding source for the GPL-licensed software on this disc',
   '(Stillsong itself, and ComfyUI, which is shipped as its source archive)',

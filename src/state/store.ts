@@ -7,10 +7,9 @@
 
 import { useSyncExternalStore } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { CreationStage, Engine, JobProgress, RenderPrefix } from '@engine/index';
+import type { CreationStage, Engine, JobProgress } from '@engine/index';
 import type { Job, PhotoAsset, Song, SongSpec } from '@engine/domain/types';
-import { CAP, isEnhanceOf, randomSeed } from '@engine/domain/types';
-import { compositionFrames, editPrefixFrames } from '@engine/domain/editPrefix';
+import { randomSeed } from '@engine/domain/types';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
 import { routeForBoot } from './route';
@@ -351,10 +350,10 @@ export async function createFromPhoto(
 }
 
 /** Remix / edited-spec render (no LLM stages; parented to the original). */
-export async function enqueueRemix(spec: SongSpec, parentId: string, prefix?: RenderPrefix): Promise<void> {
+export async function enqueueRemix(spec: SongSpec, parentId: string): Promise<void> {
   try {
     setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: spec.title, photo: spec.photo }, screen: 'create' });
-    await getEngine().enqueueSong(spec, parentId, prefix);
+    await getEngine().enqueueSong(spec, parentId);
   } catch (err) {
     setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
   }
@@ -362,8 +361,8 @@ export async function enqueueRemix(spec: SongSpec, parentId: string, prefix?: Re
 
 /**
  * "Try again" after a render failed in the studio: the same song (same spec,
- * seed, parent and forced prefix) goes back to the queue, so a remix or
- * enhance that hit a transient ComfyUI fault is not rebuilt by hand.
+ * seed, parent and kept melody) goes back to the queue, so a remix that hit
+ * a transient ComfyUI fault is not rebuilt by hand.
  */
 export async function retryFailedSong(): Promise<void> {
   const song = state.failedSong;
@@ -386,65 +385,26 @@ export async function cancelCreation(): Promise<void> {
   await refreshLists();
 }
 
-/**
- * "Let it finish": teacher-force the truncated take's entire saved composition
- * and raise the cap, so the composer replays the song bit-exactly and keeps
- * writing past where the cap cut it off (verified: the continuation matches
- * what an uncapped run would have produced). Without saved codes (legacy song,
- * stock ComfyUI) it degrades to a same-seed re-run, which usually — not
- * always — resembles the original. Capped at CAP.max: above it the KV cache
- * exhausts 16 GB VRAM (360 s left 141 MB free).
- */
-export async function rerunLonger(song: Song, extraSec = 30): Promise<void> {
-  const durationSec = Math.min(CAP.max, Math.round(song.spec.durationSec + extraSec));
-  if (durationSec <= song.spec.durationSec) return; // already at the ceiling — the notice should be hidden
-  const prefix = song.codesPath ? { songId: song.id } : undefined;
-  await enqueueRemix({ ...song.spec, durationSec }, song.id, prefix);
-}
-
-/**
- * "Enhance quality": the same song re-taken with the 'enhanced' step count,
- * arriving as a new version beside the original like any remix (the sharper
- * pass is usually, not always, the better one — the listener decides).
- */
-export async function enhanceSong(song: Song): Promise<void> {
-  try {
-    setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
-    await getEngine().enhanceSong(song.id);
-  } catch (err) {
-    setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
-  }
-}
-
-/** An "Enhance quality" take of this song is queued or rendering. */
-export function enhancePending(song: Song, songs: Song[] = state.songs): boolean {
-  return songs.some((s) => isEnhanceOf(s, song) && (s.status === 'queued' || s.status === 'running'));
-}
-
-/** Whether "Let it finish" can actually buy the song more room. */
-export function canRerunLonger(song: Song): boolean {
-  return song.spec.durationSec < CAP.max;
-}
-
-/** Starting spec for the Remix editor: same everything, fresh seed. */
+/** Starting spec for the Remix editor: same everything, fresh seed; the plan is chosen on Create. */
 export function remixSpec(song: Song): SongSpec {
-  return { ...song.spec, seed: randomSeed() };
+  return { ...song.spec, seed: randomSeed(), abc: undefined };
+}
+
+/** Whether a remix of this song can keep its melody (it performed a saved plan). */
+export function canKeepMelody(song: Song): boolean {
+  return !!song.planAbc?.trim() && song.spec.planMode !== 'off';
 }
 
 /**
- * Same-seed remix: how much of the original performance can be kept. The part
- * before the first edited lyric section is teacher-forced (bit-exact);
- * everything after is re-composed to fit the new words. Undefined when nothing
- * can be forced: new seed, no saved codes, a changed caption (it conditions
- * the whole song), or an edit in the opening section.
+ * The plan a remix performs. "Keep melody" re-performs the original's plan
+ * (verified 2026-11-10: the same plan with a new seed, or with an edited
+ * lyric line, keeps a recognizable melody — voices and instruments can shift;
+ * with the same seed and unchanged inputs it is the identical performance).
+ * Otherwise the remix writes a new plan. A hand-edited plan wins over both.
  */
-export function remixPrefix(original: Song, spec: SongSpec, keepSeed: boolean): RenderPrefix | undefined {
-  if (!keepSeed || !original.codesPath) return undefined;
-  if (spec.caption !== original.spec.caption) return undefined;
-  const total = compositionFrames(original.actualSec, original.spec.durationSec);
-  const frames = editPrefixFrames(original.spec.lyrics, spec.lyrics, total);
-  if (frames <= 0) return undefined;
-  return Number.isFinite(frames) ? { songId: original.id, frames } : { songId: original.id };
+export function remixAbc(original: Song, keepMelody: boolean, editedAbc?: string): string | undefined {
+  if (editedAbc?.trim()) return editedAbc;
+  return keepMelody && canKeepMelody(original) ? original.planAbc : undefined;
 }
 
 // ---- song actions ----------------------------------------------------------

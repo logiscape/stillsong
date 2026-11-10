@@ -1,4 +1,4 @@
-// Live songwriter tests (STILLSONG_LIVE=1): llama-server boot + JSON-schema
+// Live songwriter tests (STILLSONG2_LIVE=1): llama-server boot + JSON-schema
 // conformance + vision + the full one-button pipeline. Needs the llama.cpp
 // build and Gemma GGUFs provisioned under the components dir, and ComfyUI up
 // for the full-pipeline test.
@@ -13,9 +13,9 @@ import { COMPOSE_SCHEMA, analysisPrompt } from '@engine/cowriter/guides';
 import { PhotoRepo } from '@engine/repo/photos';
 import { llamaAvailable, livePorts, nodeRuntime } from './livePorts';
 
-const LIVE = process.env.STILLSONG_LIVE === '1' && llamaAvailable();
+const LIVE = process.env.STILLSONG2_LIVE === '1' && llamaAvailable();
 // Any picture works; the app icon is the one image guaranteed to be in the repo.
-const PHOTO = process.env.STILLSONG_PHOTO ?? fileURLToPath(new URL('../../../src-tauri/icons/icon.png', import.meta.url));
+const PHOTO = process.env.STILLSONG2_PHOTO ?? fileURLToPath(new URL('../../../src-tauri/icons/icon.png', import.meta.url));
 
 const runtime = nodeRuntime();
 

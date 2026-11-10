@@ -77,10 +77,14 @@ const tree = execFileSync(
   ['tree', '-e', 'normal', '--prefix', 'none', '--format', '{p}', '--manifest-path', cargoManifest],
   { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
 );
+// The app's own crate is first-party, not a third-party notice. Read its name
+// from Cargo.toml so a rename (stillsong -> stillsong2) can't leak it in.
+const ownCrate = /^\s*name\s*=\s*"([^"]+)"/m.exec(readFileSync(cargoManifest, 'utf8'))?.[1];
+if (!ownCrate) throw new Error('could not read the package name from src-tauri/Cargo.toml');
 const linked = new Set();
 for (const line of tree.split('\n')) {
   const m = line.trim().match(/^(\S+) v(\S+)/);
-  if (m && m[1] !== 'stillsong') linked.add(`${m[1]} ${m[2]}`);
+  if (m && m[1] !== ownCrate) linked.add(`${m[1]} ${m[2]}`);
 }
 const metadata = JSON.parse(
   execFileSync('cargo', ['metadata', '--format-version', '1', '--manifest-path', cargoManifest], {
@@ -106,8 +110,8 @@ for (const f of ['OFL-Newsreader.txt', 'OFL-SourceSans3.txt', 'OFL-IBMPlexMono.t
 // --- emit ---
 const RULE = '='.repeat(72);
 const parts = [
-  `Third-party license notices for Stillsong
-Stillsong itself is GPL-3.0 (see LICENSE). This file reproduces the license
+  `Third-party license notices for Stillsong 2
+Stillsong 2 itself is GPL-3.0 (see LICENSE). This file reproduces the license
 and notice texts of the open-source components compiled into the distributed
 application: the frontend packages bundled by Vite, every Rust crate linked
 into the binary, and the vendored fonts. Components downloaded at first run

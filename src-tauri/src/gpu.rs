@@ -157,10 +157,10 @@ fn env_override_mb(var: &str) -> Option<u64> {
 
 pub fn detect() -> GpuInfo {
     let mut info = detect_real();
-    if let Some(mb) = env_override_mb("STILLSONG_VRAM_MB") {
+    if let Some(mb) = env_override_mb("STILLSONG2_VRAM_MB") {
         info.vram_mb = mb;
     }
-    if let Some(mb) = env_override_mb("STILLSONG_RAM_MB") {
+    if let Some(mb) = env_override_mb("STILLSONG2_RAM_MB") {
         info.ram_mb = mb;
     }
     info
