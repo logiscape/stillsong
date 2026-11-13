@@ -65,6 +65,14 @@ export interface SongSpec {
    * on a remix. Empty/undefined: write a new one (unless planMode is 'off').
    */
   abc?: string;
+  /**
+   * Set on a "keep the rest" edit: perform the source song's saved take again
+   * with these lyrics, re-singing only the lines that changed. Seed and plan
+   * are the source's. Unlike every other spec, this one is not a recipe for
+   * the whole recording (the kept parts come from the source's take), so a
+   * full remix must drop it.
+   */
+  edit?: { sourceId: string };
   quality: Mp3Quality;
   /** Co-writer controls, kept so a remix starts from the same brief. */
   vocalPref: VocalPref;
@@ -73,6 +81,9 @@ export interface SongSpec {
 }
 
 export type SongStatus = 'draft' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** A half-open span of 25 Hz audio frames: [start, end). */
+export type FrameWindow = [start: number, end: number];
 
 export interface Song {
   id: string;
@@ -89,6 +100,14 @@ export interface Song {
   hitCeiling?: boolean;
   /** The melody plan this take performed (generated, kept or hand-edited); absent for planMode 'off'. */
   planAbc?: string;
+  /**
+   * The saved take (music tokens + final latent, `songs/<id>.take.safetensors`):
+   * what lets a later edit re-sing some lines and keep the rest of this
+   * recording exactly. Absent for songs made without the studio's own nodes.
+   */
+  takePath?: string;
+  /** On a "keep the rest" edit: the frame windows that were sung again. */
+  editWindows?: FrameWindow[];
   comfyPromptId?: string;
   /** Wall-clock job time (submit through harvest), recorded when the render finishes. */
   renderMs?: number;

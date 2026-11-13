@@ -42,6 +42,12 @@ export interface ThumbnailInfo {
 export interface FileStore {
   /** Streams a URL to a file under the app library dir; returns the absolute path. */
   download(url: string, relPath: string): Promise<string>;
+  /**
+   * Sends one library file to a URL as multipart form data (the file in field
+   * `image`, as ComfyUI's /upload/image expects, plus text `fields`). The only
+   * way a library file reaches the studio: a saved take, for an edit.
+   */
+  upload(url: string, relPath: string, fileName: string, fields: Record<string, string>): Promise<HttpResponse>;
   /** Copies a file into the library; returns the absolute destination path. */
   importFile(srcPath: string, relPath: string): Promise<string>;
   /** Writes base64-decoded bytes into the library (in-memory content, e.g. a canvas drawing); returns the absolute path. */

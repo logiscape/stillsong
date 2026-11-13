@@ -34,9 +34,20 @@ if ($listening) {
     throw "Port $Port is already in use (another ComfyUI?). Stop it or pass -Port."
 }
 
+# The studio's one custom node package (comfy-nodes\ComfyUI-Stillsong2). The
+# app writes it from its own binary before each spawn; a standalone ComfyUI
+# gets the working tree's copy here, so the live suite tests these sources.
+$nodesSrc = Join-Path $PSScriptRoot '..\comfy-nodes\ComfyUI-Stillsong2'
+$nodesDst = Join-Path $comfyData 'custom_nodes\ComfyUI-Stillsong2'
+if (Test-Path $nodesDst) { Remove-Item -Recurse -Force $nodesDst }
+New-Item -ItemType Directory -Force $nodesDst | Out-Null
+Get-ChildItem -File $nodesSrc | Copy-Item -Destination $nodesDst
+
 $comfyArgs = @('--port', $Port, '--base-directory', $comfyData, '--offline')
 if ($ReserveVram -gt 0) { $comfyArgs += @('--reserve-vram', $ReserveVram) }
 if ($ExtraArgs.Count -gt 0) { $comfyArgs += $ExtraArgs }
+# Last: the whitelist takes one or more names. Nothing else in custom_nodes loads.
+$comfyArgs += @('--disable-all-custom-nodes', '--whitelist-custom-nodes', 'ComfyUI-Stillsong2')
 
 $env:HF_HUB_OFFLINE = '1'
 Set-Location $Components

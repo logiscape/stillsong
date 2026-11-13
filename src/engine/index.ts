@@ -7,12 +7,14 @@
 
 import { newId, type Ports } from './ports';
 import { migrate } from './migrations';
-import type { Job, PhotoAsset, Song, SongSpec, VocalPref } from './domain/types';
+import type { FrameWindow, Job, PhotoAsset, Song, SongSpec, VocalPref } from './domain/types';
 import { AUDIO_FRAMES_PER_SECOND, DURATION, defaultSpec, randomSeed } from './domain/types';
 import { validateSpec, type ValidationIssue } from './domain/validate';
 import { hardwareTier, type HardwareTier } from './domain/duration';
 import type { HardwareInfo, RuntimeInstallState } from './ports';
-import { buildGraph, PLAN_OUT, SECONDS_OUT } from './comfy/graphBuilder';
+import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, EDIT_PHASES, PLAN_OUT, SECONDS_OUT, type EditSource } from './comfy/graphBuilder';
+import { TAKE_NODE, type ApiGraph } from './comfy/nodes';
+import { editWindows, mergeWindows, parseAlignSeries } from './domain/editWindows';
 import { ComfyClient, type HistoryEntry } from './comfy/client';
 import { ProgressTracker, type ProgressEvent } from './comfy/events';
 import { SongRepo, type ComposedLength } from './repo/songs';
@@ -32,6 +34,21 @@ export const RENDER_OUTPUT_SUBFOLDER = 'audio/stillsong2';
 export function renderFilePrefix(songId: string): string {
   return `${RENDER_OUTPUT_SUBFOLDER}/${songId.slice(0, 8)}`;
 }
+
+/** A render's outputs, told apart by name: the audio, and the take saved beside it. */
+const AUDIO_FILE = /\.(mp3|flac|opus|wav)$/i;
+const TAKE_FILE = /\.take\.safetensors$/i;
+
+/** Library path of a song's take (tokens + latent). */
+export function takeRelPath(songId: string): string {
+  return `songs/${songId}.take.safetensors`;
+}
+
+/** Where an edit's source take is sent, under ComfyUI's temp folder (emptied at every ComfyUI start). */
+const TAKE_UPLOAD_FOLDER = 'stillsong2';
+
+type ProgressFn = (phase: string, extra?: Partial<JobProgress>) => void;
+type PromptOutcome = { kind: 'success'; perform?: PerformProgress } | { kind: 'interrupted' } | { kind: 'error'; message: string };
 
 export interface JobProgress {
   jobId: string;
@@ -76,6 +93,15 @@ export class Engine {
   private tracker = new ProgressTracker();
   private currentJob: Job | null = null;
   private creating = false;
+  /**
+   * Whether ComfyUI has the studio's own nodes (comfy-nodes/ComfyUI-Stillsong2).
+   * Probed when a render starts, until seen: with them every render saves its
+   * take; without them (the package refused to load) songs still render
+   * through the core nodes, and can only be remixed whole.
+   */
+  private takeNodes = false;
+  /** Id of the running job the user asked to stop (see `runPrompt`). */
+  private cancelling: string | null = null;
 
   /** Detected hardware and its support tier. */
   public hardware: HardwareInfo = { vendor: 'unknown', vramMb: 0, ramMb: 0 };
@@ -252,6 +278,11 @@ export class Engine {
   async enqueueSong(spec: SongSpec, parentId?: string): Promise<Song> {
     const errors = validateSpec(spec).filter((i) => i.severity === 'error');
     if (errors.length) throw new Error(errors.map((e) => e.message).join(' '));
+    if (spec.edit) {
+      // Refused here rather than a minute later in the studio.
+      const source = await this.songs.byId(spec.edit.sourceId);
+      if (!source?.takePath || !source.planAbc?.trim()) throw new Error('The original recording is no longer here to keep.');
+    }
     const song = await this.songs.create(spec, this.ports.clock.now(), parentId, 'queued');
     await this.jobs.enqueue(song.id, this.ports.clock.now());
     this.emit({ kind: 'queue_changed' });
@@ -285,6 +316,23 @@ export class Engine {
     return { ...song, status: 'queued', error: undefined };
   }
 
+  /**
+   * A failed "keep the rest" edit, sent back to the studio as an ordinary
+   * remix instead: the same row, lyrics, seed and plan, with the whole song
+   * performed again. For when the studio could not keep the rest (the lines
+   * were not found, old words stayed in, the original's take is gone).
+   */
+  async retryWhole(songId: string): Promise<Song> {
+    const song = await this.songs.byId(songId);
+    if (!song) throw new Error('That song is no longer here.');
+    if (song.status !== 'failed') throw new Error('Only a song that failed can be retried.');
+    if (song.spec.edit) {
+      const { edit: _edit, ...whole } = song.spec;
+      await this.songs.setSpec(song.id, whole);
+    }
+    return this.retrySong(songId);
+  }
+
   async cancelJob(jobId: string): Promise<void> {
     const job = await this.jobs.byId(jobId);
     if (!job) return;
@@ -292,6 +340,7 @@ export class Engine {
       await this.jobs.setState(jobId, 'cancelled');
       await this.songs.setStatus(job.songId, 'cancelled');
     } else if (this.currentJob?.id === jobId) {
+      this.cancelling = jobId;
       if (job.comfyPromptId) await this.comfy.deleteQueued(job.comfyPromptId).catch(() => {});
       await this.comfy.interrupt();
       // the WS 'interrupted' event (or the history poll) finishes the bookkeeping
@@ -307,6 +356,7 @@ export class Engine {
       for (const j of jobs) await this.cancelJob(j.id);
     }
     if (song.outputPath) await this.ports.files.remove(song.outputPath).catch(() => {});
+    if (song.takePath) await this.ports.files.remove(song.takePath).catch(() => {});
     await this.jobs.deleteForSong(id);
     // Children point at the deleted song's parent so lineage survives.
     await this.songs.reparentChildren(id, song.parentId ?? null);
@@ -321,6 +371,12 @@ export class Engine {
 
   async revealSong(song: Song): Promise<void> {
     if (song.outputPath) await this.ports.files.reveal(song.outputPath);
+  }
+
+  /** See `takeNodes`: asked once the studio is up, and again until the nodes are seen. */
+  private async hasTakeNodes(): Promise<boolean> {
+    if (!this.takeNodes) this.takeNodes = await this.comfy.hasNode(TAKE_NODE);
+    return this.takeNodes;
   }
 
   /** Sequential runner: picks the next queued job whenever idle. */
@@ -348,6 +404,8 @@ export class Engine {
     const song = await this.songs.byId(job.songId);
     if (!song) {
       await this.jobs.setState(job.id, 'failed', { error: 'song missing' });
+      // Not left set: createFromPhoto refuses while a job is current.
+      this.currentJob = null;
       return;
     }
     const progress = (phase: string, extra: Partial<JobProgress> = {}) =>
@@ -363,32 +421,13 @@ export class Engine {
       progress('Clearing GPU (stopping the songwriter if running)');
       await this.vram.acquireForComfy();
 
-      const filePrefix = renderFilePrefix(song.id);
-      const { graph } = buildGraph(song.spec, filePrefix);
-      let promptId = '';
-
-      // Open the progress socket, submit, then track until terminal
-      // (WS with history polling as a fallback).
-      const outcome = await this.trackToCompletion(async (clientId) => {
-        promptId = await this.comfy.submit(graph, clientId);
-        await this.jobs.setState(job.id, 'submitted', { comfyPromptId: promptId });
-        await this.songs.setComfyPromptId(song.id, promptId);
-        progress('Waiting for ComfyUI');
-        await this.jobs.setState(job.id, 'running');
-        this.emit({ kind: 'queue_changed' });
-        return promptId;
-      }, progress);
-      if (outcome.kind === 'interrupted') {
+      const cancelled = song.spec.edit
+        ? (await this.runEdit(job, song, startedAt, progress)) === 'cancelled'
+        : (await this.runRender(job, song, startedAt, progress)) === 'cancelled';
+      if (cancelled) {
         await this.jobs.setState(job.id, 'cancelled', { finishedAt: this.ports.clock.now() });
         await this.songs.setStatus(song.id, 'cancelled');
-        return;
       }
-      if (outcome.kind === 'error') throw new Error(outcome.message);
-
-      await this.jobs.setState(job.id, 'harvesting');
-      this.emit({ kind: 'queue_changed' });
-      progress('Downloading song');
-      await this.harvest(job, song, promptId, startedAt, outcome.perform);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.jobs.setState(job.id, 'failed', { error: message, finishedAt: this.ports.clock.now() });
@@ -397,21 +436,193 @@ export class Engine {
       this.emit({ kind: 'song_failed', song: failed });
     } finally {
       this.currentJob = null;
+      this.cancelling = null;
     }
   }
 
-  private async harvest(job: Job, song: Song, promptId: string, startedAt: number | undefined, perform?: PerformProgress): Promise<void> {
+  /** The ordinary render: one prompt, then the harvest. */
+  private async runRender(job: Job, song: Song, startedAt: number, progress: ProgressFn): Promise<'done' | 'cancelled'> {
+    const { graph } = buildGraph(song.spec, renderFilePrefix(song.id), { capture: await this.hasTakeNodes() });
+    const { promptId, outcome } = await this.runPrompt(job, graph, progress, { record: song, announce: true });
+    if (outcome.kind === 'interrupted') return 'cancelled';
+    if (outcome.kind === 'error') throw new Error(outcome.message);
+
+    await this.jobs.setState(job.id, 'harvesting');
+    this.emit({ kind: 'queue_changed' });
+    progress('Downloading song');
+    await this.harvest(job, song, promptId, startedAt, outcome.perform);
+    return 'done';
+  }
+
+  /**
+   * Submits one graph and tracks it to a terminal state (WS with history
+   * polling as a fallback). A job can run several prompts (an edit does);
+   * `record` names the one that makes the song's audio, the only prompt whose
+   * id is stored (startup recovery may harvest it). `label`, when given,
+   * replaces every phase the prompt reports, so a short helper prompt cannot
+   * move the creation stages backwards.
+   */
+  private async runPrompt(
+    job: Job,
+    graph: ApiGraph,
+    progress: ProgressFn,
+    opts: { record?: Song; announce?: boolean; label?: string } = {},
+  ): Promise<{ promptId: string; outcome: PromptOutcome }> {
+    // ComfyUI forgets an interrupt when its next prompt starts, so a cancel
+    // that lands between two prompts is remembered here.
+    if (this.cancelling === job.id) return { promptId: '', outcome: { kind: 'interrupted' } };
+    const label = opts.label;
+    const report: ProgressFn = label ? () => progress(label) : progress;
+    let promptId = '';
+    const outcome = await this.trackToCompletion(async (clientId) => {
+      promptId = await this.comfy.submit(graph, clientId);
+      if (opts.record) {
+        await this.jobs.setState(job.id, 'submitted', { comfyPromptId: promptId });
+        await this.songs.setComfyPromptId(opts.record.id, promptId);
+      }
+      if (opts.announce) progress('Waiting for ComfyUI');
+      await this.jobs.setState(job.id, 'running');
+      this.emit({ kind: 'queue_changed' });
+      return promptId;
+    }, report);
+    if (this.cancelling === job.id && outcome.kind === 'success') return { promptId, outcome: { kind: 'interrupted' } };
+    return { promptId, outcome };
+  }
+
+  /**
+   * A "keep the rest" edit (spec.edit): perform the source song's take again
+   * with the edited lyrics, re-singing only the lines that changed.
+   *
+   *  1. Send the source take to the studio.
+   *  2. Ask where the take sings words the edited sheet no longer has (two
+   *     replays of the take; no audio) -> the windows to sing again.
+   *  3. Perform: tokens and latent outside the windows are held.
+   *  4. Ask the same question of the new take. Old words still in it (the
+   *     tail of a held word just past a window): widen and perform once more.
+   *
+   * It never falls back to a whole remix on its own: when it cannot keep the
+   * rest it fails with a plain reason, and the person decides.
+   */
+  private async runEdit(job: Job, song: Song, startedAt: number, progress: ProgressFn): Promise<'done' | 'cancelled'> {
+    const finding = EDIT_PHASES.finding;
+    progress(finding);
+    if (!(await this.hasTakeNodes())) throw new Error('The studio cannot keep part of a recording right now.');
+    const source = await this.songs.byId(song.spec.edit!.sourceId);
+    const abc = source?.planAbc ?? '';
+    if (!source?.takePath || !abc.trim() || !(await this.ports.files.exists(source.takePath))) {
+      throw new Error('The original recording is no longer here to keep.');
+    }
+    const take = await this.comfy.uploadTemp(takeRelPath(source.id), `${source.id.slice(0, 8)}.take.safetensors`, TAKE_UPLOAD_FOLDER);
+    const from: EditSource = { take, abc };
+
+    const asked = await this.sungWindows(job, song, from, source.spec.lyrics, finding, progress);
+    if (asked === 'cancelled') return 'cancelled';
+    let windows = asked;
+    if (windows.length === 0) throw new Error('We could not find where those lines are sung.');
+
+    for (let attempt = 0; ; attempt++) {
+      // A fresh file prefix per attempt: ComfyUI serves an identical save node
+      // from its cache, and would name files this job already removed.
+      const prefix = `${renderFilePrefix(song.id)}_${newId().slice(0, 6)}`;
+      const { graph } = buildEditGraph(song.spec, from, windows, prefix);
+      const again = attempt > 0 ? EDIT_PHASES.again : undefined;
+      const { promptId, outcome } = await this.runPrompt(job, graph, progress, { record: song, label: again });
+      if (outcome.kind === 'interrupted') return 'cancelled';
+      if (outcome.kind === 'error') throw new Error(outcome.message);
+
+      const hist = await this.comfy.history(promptId);
+      // This attempt's audio and take sit in ComfyUI's output until harvested.
+      // Every other way out of the attempt removes them: the sweep keeps a
+      // living song's files, and each retry saves under a new prefix, so an
+      // unremoved candidate would stay for as long as the song does.
+      const discard = async () => {
+        for (const f of hist?.files ?? []) await this.ports.runtime.removeComfyOutput(f).catch(() => {});
+      };
+      const checking = EDIT_PHASES.checking;
+      let leftover: FrameWindow[] | 'cancelled';
+      try {
+        const newTake = hist?.files.find((f) => TAKE_FILE.test(f.filename));
+        if (!newTake) throw new Error('Render finished but produced no take');
+        progress(checking);
+        leftover = await this.sungWindows(job, song, { take: this.comfy.outputName(newTake), abc }, source.spec.lyrics, checking, progress);
+      } catch (err) {
+        await discard();
+        throw err;
+      }
+      if (leftover === 'cancelled' || (leftover.length > 0 && attempt > 0)) {
+        await discard();
+        if (leftover === 'cancelled') return 'cancelled';
+        throw new Error('Some of the old words stayed in the recording.');
+      }
+      if (leftover.length === 0) {
+        await this.jobs.setState(job.id, 'harvesting');
+        this.emit({ kind: 'queue_changed' });
+        progress('Downloading song');
+        await this.harvest(job, song, promptId, startedAt, outcome.perform, { source, windows });
+        return 'done';
+      }
+      await discard();
+      windows = mergeWindows(windows, leftover);
+    }
+  }
+
+  /**
+   * Where does `from.take` sing words of `originalLyrics` that this song's
+   * lyrics no longer have? The windows to sing again (empty: nowhere).
+   */
+  private async sungWindows(
+    job: Job,
+    song: Song,
+    from: EditSource,
+    originalLyrics: string,
+    label: string,
+    progress: ProgressFn,
+  ): Promise<FrameWindow[] | 'cancelled'> {
+    const { graph } = buildAlignGraph(song.spec, from, originalLyrics, song.spec.lyrics);
+    const { promptId, outcome } = await this.runPrompt(job, graph, progress, { label });
+    if (outcome.kind === 'interrupted') return 'cancelled';
+    if (outcome.kind === 'error') throw new Error(outcome.message);
+    const series = parseAlignSeries((await this.comfy.history(promptId))?.texts[ALIGN_OUT]);
+    if (!series) throw new Error('The studio did not say where the lines are sung.');
+    return editWindows(series.drop);
+  }
+
+  private async harvest(
+    job: Job,
+    song: Song,
+    promptId: string,
+    startedAt: number | undefined,
+    perform?: PerformProgress,
+    /** A "keep the rest" edit: what it kept from, and the windows it sang again. */
+    edit?: { source: Song; windows: FrameWindow[] },
+  ): Promise<void> {
     const hist = await this.comfy.history(promptId);
-    const file = hist?.files.find((f) => /\.(mp3|flac|opus|wav)$/i.test(f.filename)) ?? hist?.files[0];
-    if (!file) throw new Error('Render finished but produced no audio output');
-    const outPath = await this.comfy.downloadOutput(file, `songs/${song.id}.mp3`);
-    // The library now holds the only copy that matters. ComfyUI's original
+    const audio = hist?.files.find((f) => AUDIO_FILE.test(f.filename));
+    if (!audio) throw new Error('Render finished but produced no audio output');
+    const take = hist?.files.find((f) => TAKE_FILE.test(f.filename));
+    const outPath = await this.comfy.downloadOutput(audio, `songs/${song.id}.mp3`);
+    // The take only matters to a later "keep the rest" edit: a song whose
+    // take could not be copied still plays, and can still be remixed whole.
+    const takePath = take ? await this.comfy.downloadOutput(take, takeRelPath(song.id)).catch(() => undefined) : undefined;
+    const finishedAt = this.ports.clock.now();
+    // An edit keeps its source's length exactly, and so whether that take
+    // was cut off; a render reports its own.
+    const composed = edit
+      ? { actualSec: edit.source.actualSec ?? composedLength(hist, song.spec)?.actualSec, hitCeiling: edit.source.hitCeiling ?? false }
+      : composedLength(hist, song.spec, perform);
+    await this.songs.setOutput(song.id, {
+      outputPath: outPath,
+      renderMs: startedAt ? finishedAt - startedAt : undefined,
+      composed,
+      planAbc: edit ? edit.source.planAbc : performedPlan(hist, song.spec),
+      takePath,
+      editWindows: edit?.windows,
+    });
+    // The library now holds the only copies that matter. ComfyUI's originals
     // would otherwise accumulate forever (and outlive "delete song" — the
     // mp3's ID3 tag carries the full prompt).
-    await this.ports.runtime.removeComfyOutput(file).catch(() => {});
-    const finishedAt = this.ports.clock.now();
-    const composed = composedLength(hist, song.spec, perform);
-    await this.songs.setOutput(song.id, outPath, startedAt ? finishedAt - startedAt : undefined, composed, performedPlan(hist, song.spec));
+    await this.ports.runtime.removeComfyOutput(audio).catch(() => {});
+    if (take) await this.ports.runtime.removeComfyOutput(take).catch(() => {});
     await this.jobs.setState(job.id, 'done', { finishedAt });
     const done = (await this.songs.byId(song.id))!;
     this.emit({ kind: 'song_done', song: done });
@@ -591,7 +802,19 @@ export class Engine {
       }
       const hist = await this.comfy.history(job.comfyPromptId).catch(() => null);
       const song = await this.songs.byId(job.songId);
-      if (hist?.status === 'success' && hist.files.length && song) {
+      if (song?.spec.edit) {
+        // A "keep the rest" edit is not finished when its audio prompt is: the
+        // check for old words runs after it, and the windows it sang live only
+        // in the engine that was running. A studio that outlived that engine
+        // (the interface reloaded; the processes did not) may report the
+        // prompt done, but harvesting it would accept an unchecked take. The
+        // edit starts over instead; its abandoned attempt is cleared away.
+        await this.abandonPrompt(job.comfyPromptId, hist);
+        await this.jobs.setState(job.id, 'queued');
+        await this.songs.setStatus(song.id, 'queued');
+        continue;
+      }
+      if (hist?.status === 'success' && hist.files.some((f) => AUDIO_FILE.test(f.filename)) && song) {
         try {
           await this.harvest(job, song, job.comfyPromptId, job.startedAt);
           continue;
@@ -608,6 +831,21 @@ export class Engine {
       await this.songs.setStatus(job.songId, 'failed', 'App restarted mid-render');
     }
     void this.pump();
+  }
+
+  /**
+   * Best effort: stop a prompt nobody is waiting for any more (still queued or
+   * running in a studio that outlived its engine) and remove what it wrote.
+   */
+  private async abandonPrompt(promptId: string, hist: HistoryEntry | null): Promise<void> {
+    try {
+      const queue = await this.comfy.queue();
+      if (queue.pendingPromptIds.includes(promptId)) await this.comfy.deleteQueued(promptId);
+      if (queue.runningPromptIds.includes(promptId)) await this.comfy.interrupt();
+    } catch {
+      /* the studio is not answering: nothing is running there */
+    }
+    for (const f of hist?.files ?? []) await this.ports.runtime.removeComfyOutput(f).catch(() => {});
   }
 
   /**

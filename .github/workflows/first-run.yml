@@ -18,6 +18,8 @@ on:
       - src-tauri/src/downloads.rs
       - src-tauri/src/components.rs
       - src-tauri/src/supervisor.rs
+      - src-tauri/src/nodes.rs
+      - comfy-nodes/**
       - .github/workflows/first-run.yml
   pull_request:
     paths:
@@ -26,6 +28,8 @@ on:
       - src-tauri/src/downloads.rs
       - src-tauri/src/components.rs
       - src-tauri/src/supervisor.rs
+      - src-tauri/src/nodes.rs
+      - comfy-nodes/**
       - .github/workflows/first-run.yml
   workflow_dispatch:
 

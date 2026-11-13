@@ -4,8 +4,9 @@
 import React, { useEffect, useState } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { AUDIO_FRAMES_PER_SECOND } from '@engine/domain/types';
+import { EDIT_PHASES } from '@engine/comfy/graphBuilder';
 import {
-  choosePhoto, clearPhoto, createFromPhoto, navigate, photoSrc, retryFailedSong, useAppState, type CreationState,
+  choosePhoto, clearPhoto, createFromPhoto, navigate, photoSrc, retryFailedSong, retryFailedSongWhole, useAppState, type CreationState,
 } from '@state/store';
 import { getPaintSession } from '@state/paintSession';
 import { pickPhotoPath } from '@ui/ds/pickFiles';
@@ -31,6 +32,12 @@ function StatusExperience({ creation }: { creation: CreationState }): React.Reac
   // Composing has two bars: the melody plan (no length estimate: its max is
   // a ceiling, not a forecast), then the performance (25 tokens = 1 s written).
   const planning = creation.stage === 'composing' && p?.stepNode === 'plan';
+  // A "keep the rest" edit names three phases of its own.
+  const editPhase =
+    p?.phase === EDIT_PHASES.finding ? 'Finding your lines…'
+    : p?.phase === EDIT_PHASES.checking ? 'Checking the new lines…'
+    : p?.phase === EDIT_PHASES.again ? 'Singing those lines once more…'
+    : null;
   const composing = creation.stage === 'composing' && p?.stepNode === 'perform' && p.stepValue != null;
   const rendering = creation.stage === 'rendering' && p?.stepNode === 'sample' && p.stepValue != null && p.stepMax;
   return (
@@ -55,7 +62,9 @@ function StatusExperience({ creation }: { creation: CreationState }): React.Reac
           </div>
         )}
         <div style={{ height: 'var(--space-7)' }} />
-        {planning ? (
+        {editPhase ? (
+          <ProgressBar indeterminate label={editPhase} />
+        ) : planning ? (
           <ProgressBar indeterminate label="Writing the melody…" />
         ) : composing ? (
           <ProgressBar indeterminate label="Composing the song…" detail={`${fmtDuration((p!.stepValue ?? 0) / AUDIO_FRAMES_PER_SECOND)} written`} />
@@ -105,11 +114,13 @@ export function CreateScreen(): React.ReactElement {
 
   if (s.creation) return <StatusExperience creation={s.creation} />;
 
-  // A render that died in the studio keeps its song row (spec, seed, parent,
-  // forced prefix), so "Try again" re-queues that exact song — for a remix,
-  // enhance or "let it finish" there is no photo to start over from. A photo
-  // creation that failed before a song existed starts the pipeline over.
+  // A render that died in the studio keeps its song row (spec, seed, parent),
+  // so "Try again" re-queues that exact song — for a remix there is no photo
+  // to start over from. A photo creation that failed before a song existed
+  // starts the pipeline over. A "keep the rest" edit that failed can also be
+  // sent back as an ordinary remix: the whole song, sung again.
   const retryable = s.creationError !== null && s.failedSong !== null;
+  const failedEdit = retryable && !!s.failedSong?.spec.edit;
   const failed = s.creationError !== null && (s.pendingPhoto !== null || retryable);
   const ambient = s.pendingPhoto?.dominantColor;
 
@@ -121,7 +132,12 @@ export function CreateScreen(): React.ReactElement {
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         {failed && (
           <div style={{ marginBottom: 'var(--space-7)' }}>
-            {retryable ? (
+            {failedEdit ? (
+              <Notice tone="error" title="We couldn't keep the rest of the recording"
+                action="Try again" onAction={() => void retryFailedSong()}>
+                Nothing was lost — your new words are still here. You can try again, or have the whole song sung again.
+              </Notice>
+            ) : retryable ? (
               <Notice tone="error" title="Something went wrong in the studio"
                 action="Try again" onAction={() => void retryFailedSong()}>
                 Nothing was lost — your song is still here, ready for another pass.
@@ -133,6 +149,11 @@ export function CreateScreen(): React.ReactElement {
               </Notice>
             )}
             <div style={{ marginTop: 'var(--space-4)' }}>
+              {failedEdit && (
+                <Button variant="secondary" icon="dices" onClick={() => void retryFailedSongWhole()} style={{ marginRight: 12 }}>
+                  Sing it all again
+                </Button>
+              )}
               <Button variant="quiet" onClick={() => setShowDetail(!showDetail)}>{showDetail ? 'hide details' : 'details'}</Button>
               {showDetail && (
                 <Panel variant="inset" pad={14} style={{ marginTop: 10 }}>

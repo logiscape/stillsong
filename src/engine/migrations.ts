@@ -69,6 +69,10 @@ const ADDED_COLUMNS: { table: string; column: string; ddl: string }[] = [
   // Stillsong 1 added codes_path / prefix_song_id / prefix_frames here (the
   // composition codes). Stillsong 2 has its own database and never had them.
   { table: 'song', column: 'plan_abc', ddl: `ALTER TABLE song ADD COLUMN plan_abc TEXT` },
+  // The saved take (tokens + latent) and, for a "keep the rest" edit, the
+  // frame windows that were sung again (JSON [[start, end], ...]).
+  { table: 'song', column: 'take_path', ddl: `ALTER TABLE song ADD COLUMN take_path TEXT` },
+  { table: 'song', column: 'edit_windows', ddl: `ALTER TABLE song ADD COLUMN edit_windows TEXT` },
   { table: 'photo_asset', column: 'thumb_path', ddl: `ALTER TABLE photo_asset ADD COLUMN thumb_path TEXT` },
   { table: 'photo_asset', column: 'luminance', ddl: `ALTER TABLE photo_asset ADD COLUMN luminance REAL` },
   { table: 'photo_asset', column: 'dominant_color', ddl: `ALTER TABLE photo_asset ADD COLUMN dominant_color TEXT` },

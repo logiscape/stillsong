@@ -36,6 +36,7 @@ const MANIFEST: ExamplesManifest = {
       photo: { file: 'moonlit-forest.jpg', source: 'photo', analysis: { card: 'Subjects: bare trees.', source: 'photo' } },
       audio: 'moonlit.mp3',
       abc: 'X:1\nK:Dm\n% verse\nV: Vocal\nd4f4a4|',
+      take: 'moonlit.take.safetensors',
     },
     {
       id: 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2',
@@ -75,6 +76,10 @@ describe('bundled examples', () => {
     expect(moonlit.hitCeiling).toBe(false);
     expect(moonlit.spec.seed).toBe('111');
     expect(files.imported).toContainEqual({ src: `${DIR}\\moonlit.mp3`, relPath: `songs/${moonlit.id}.mp3` });
+    // Its take comes along, so part of it can be sung again and the rest kept.
+    expect(files.imported).toContainEqual({ src: `${DIR}\\moonlit.take.safetensors`, relPath: `songs/${moonlit.id}.take.safetensors` });
+    expect(moonlit.takePath).toBe(`C:\\lib\\songs/${moonlit.id}.take.safetensors`);
+    expect(songs[1].takePath).toBeUndefined(); // an example without one
     expect(files.imported).toContainEqual({ src: `${DIR}\\moonlit-forest.jpg`, relPath: 'photos/moonlit-forest.jpg' });
 
     // The photo is a real asset row with a thumbnail and the cached card.

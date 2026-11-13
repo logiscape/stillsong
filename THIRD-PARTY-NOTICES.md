@@ -21,6 +21,17 @@ and is viewable from the About screen. Summary:
 | [Lucide](https://lucide.dev) icons (via lucide-static) | ISC |
 | [Newsreader](https://fonts.google.com/specimen/Newsreader), [Source Sans 3](https://fonts.google.com/specimen/Source+Sans+3), [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) (vendored latin subsets; upstream OFL texts alongside the fonts in `src/ui/fonts/`) | SIL Open Font License 1.1 |
 
+### ComfyUI-Stillsong2 (first-party, derived from ComfyUI)
+
+The app also carries Stillsong 2's own ComfyUI node package
+(`comfy-nodes/ComfyUI-Stillsong2`, compiled into the binary and written into
+the studio's `custom_nodes` folder at each start). One of its files,
+`stillsong2_ar.py`, is adapted from `comfy/text_encoders/yue2.py` of
+[ComfyUI](https://github.com/comfyanonymous/ComfyUI) 0.42.4 (GPL-3.0),
+modified on 2026-11-13; the modifications are marked in the file. The package
+is GPL-3.0, like the rest of Stillsong. It is the only custom node package
+the studio loads.
+
 ## Downloaded at first run (from upstream, never re-hosted by this project)
 
 | Component | Source | License |

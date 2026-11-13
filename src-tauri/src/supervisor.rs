@@ -665,11 +665,22 @@ impl Supervisor {
         // other standard folders) without creating them, so a fresh
         // --base-directory must be seeded or main.py dies before serving.
         let comfy_data = comp.join("comfy-data");
-        // Stillsong 2 runs stock ComfyUI with no custom nodes at all; the
-        // empty custom_nodes dir only satisfies ComfyUI's startup scan.
         for sub in ["custom_nodes", "models", "input", "output", "temp", "user"] {
             std::fs::create_dir_all(comfy_data.join(sub)).map_err(|e| e.to_string())?;
         }
+        // The one custom node package the studio loads is Stillsong 2's own,
+        // rewritten from this binary before every spawn (so it always matches
+        // this build's ComfyUI pin). Non-fatal: without it the engine falls
+        // back to the core nodes and partial edits are simply not offered.
+        // A failed install can leave another build's files in the folder, so
+        // the folder is only whitelisted when the install succeeded.
+        let nodes_installed = match crate::nodes::install(&comfy_data.join("custom_nodes")) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("stillsong2: could not install the node package: {e}");
+                false
+            }
+        };
         let log = self.log_file("comfyui")?;
         let log_err = log.try_clone().map_err(|e| e.to_string())?;
         let mut args = vec![
@@ -690,6 +701,14 @@ impl Supervisor {
             args.push("--reserve-vram".into());
             args.push(gb.to_string());
         }
+        // Last on the command line (the whitelist takes one or more names):
+        // nothing else in custom_nodes is ever loaded, and not even our own
+        // folder when its install failed.
+        args.extend(
+            crate::nodes::launch_flags(nodes_installed)
+                .iter()
+                .map(|flag| flag.to_string()),
+        );
         let mut cmd = Command::new(&python);
         cmd.args(&args)
             .current_dir(&comp)

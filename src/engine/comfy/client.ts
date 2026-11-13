@@ -143,6 +143,26 @@ export class ComfyClient {
   async downloadOutput(f: ComfyOutputFile, relPath: string): Promise<string> {
     return this.files.download(this.viewUrl(f), relPath);
   }
+
+  /**
+   * Sends a library file to ComfyUI's temp folder (which ComfyUI empties at
+   * every start) and returns its name as a loader node takes it:
+   * "<subfolder>/<name> [temp]". ComfyUI's upload endpoint takes any file in
+   * its `image` field.
+   */
+  async uploadTemp(relPath: string, fileName: string, subfolder: string): Promise<string> {
+    const r = await this.files.upload(`${this.baseUrl}/upload/image`, relPath, fileName, { type: 'temp', subfolder, overwrite: 'true' });
+    if (r.status !== 200) throw new ComfyError(`upload failed (${r.status})`);
+    const saved = JSON.parse(r.body) as { name?: string; subfolder?: string };
+    if (!saved.name) throw new ComfyError('upload failed (no name returned)');
+    return `${saved.subfolder ? `${saved.subfolder}/` : ''}${saved.name} [temp]`;
+  }
+
+  /** A file ComfyUI wrote to its output folder, as a loader node takes it: "<subfolder>/<name> [output]". */
+  outputName(f: ComfyOutputFile): string {
+    const subfolder = f.subfolder.replace(/\\/g, '/').replace(/\/+$/, '');
+    return `${subfolder ? `${subfolder}/` : ''}${f.filename} [output]`;
+  }
 }
 
 interface HistoryRaw {

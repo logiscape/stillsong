@@ -148,6 +148,26 @@ export function stripStageDirections(lyrics: string): string {
     .join('\n');
 }
 
+/**
+ * How many sung lines `edited` changes, when that is all it does: the same
+ * tags in the same order and the same number of lines in every section (and
+ * before the first tag). Null when lines or sections were added, removed or
+ * retagged: the song's shape changed, not just its words. This is what a
+ * "keep the rest" edit can re-sing in place; it keeps the song's length.
+ */
+export function editedLineCount(original: string, edited: string): number | null {
+  const a = parseLyrics(original);
+  const b = parseLyrics(edited);
+  if (a.sections.length !== b.sections.length || a.preamble.length !== b.preamble.length) return null;
+  let changed = a.preamble.filter((line, i) => line !== b.preamble[i]).length;
+  for (const [i, section] of a.sections.entries()) {
+    const other = b.sections[i];
+    if (section.tag !== other.tag || section.lines.length !== other.lines.length) return null;
+    changed += section.lines.filter((line, j) => line !== other.lines[j]).length;
+  }
+  return changed;
+}
+
 /** True when the lyrics carry no sung words (empty or tags only). */
 export function isTagsOnly(lyrics: string): boolean {
   const { sections, preamble } = parseLyrics(lyrics);

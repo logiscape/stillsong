@@ -61,6 +61,8 @@ and your art always remains yours.
   first writes a melody plan (a short score of notes and chords) and then
   performs it; a remix can keep that melody while you change the words, the
   style or the seed. Kept seed, kept melody and no edits is the very same take.
+  Change only the words of some lines and a remix can keep the rest of the
+  recording: just those lines are sung again.
 - **Save.** Export an MP3 to listen or share, with an ID3 tag providing trust
   and transparency.
 
@@ -78,7 +80,7 @@ open-source engine that Stillsong bundles and supervises for you:
 | Role | Model | Engine |
 |---|---|---|
 | Songwriter (looks at the photo, writes caption + lyrics) | [Gemma 4 12B](https://huggingface.co/ggml-org/gemma-4-12B-it-GGUF) | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) |
-| Composer (writes the melody, performs the music) | [YuE2](https://huggingface.co/Comfy-Org/YuE2) (3B, int8) | [ComfyUI](https://github.com/comfyanonymous/ComfyUI), headless, core nodes only |
+| Composer (writes the melody, performs the music) | [YuE2](https://huggingface.co/Comfy-Org/YuE2) (3B, int8) | [ComfyUI](https://github.com/comfyanonymous/ComfyUI), headless: core nodes plus Stillsong's own small package, no third-party custom nodes |
 
 Both engines are started as child processes bound to `127.0.0.1` only, tied
 to the app with a Windows Job Object so they can never outlive it, and never
@@ -262,7 +264,9 @@ A few principles the project holds to, so PRs that cross them will be
 discussed rather than merged:
 
 - No network activity after setup. No updater, no telemetry, no remote fonts.
-- ComfyUI core nodes only; no custom nodes.
+- No third-party ComfyUI custom nodes. The studio runs ComfyUI's core nodes
+  plus one first-party package that lives in this repository
+  (`comfy-nodes/ComfyUI-Stillsong2`), and loads nothing else.
 - The engine stays pure and testable without a GPU.
 
 ## FAQ
@@ -305,6 +309,14 @@ lyrics or caption; with "Keep original" for the seed as well, the result stays
 closest to the first take, while "New seed" keeps the tune and lets the voices
 and instruments change. Remix → Advanced shows the melody plan itself, in ABC
 notation, if you want to edit the notes by hand.
+
+**Changing a few words** If all you change is the wording of lines that are
+already there, Remix offers "Keep the rest". Stillsong finds where those lines
+are sung, sings only them again, and leaves everything else in the recording
+exactly as it was, at the same length. Adding or removing lines, or changing
+the caption or the melody, sings the whole song again. Songs made before this
+feature existed do not have what it needs saved, so they are remixed whole;
+the three example songs do.
 
 **If a song stops before its ending** Every song gets the same generous length
 limit. A song that runs out of room is marked in the Song view; a remix with a

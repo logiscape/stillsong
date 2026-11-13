@@ -15,7 +15,11 @@ them.
 
 Every song ships with its MP3 (V0) and, in `examples.json`, the full song spec,
 the melody plan it performed (`abc`, so "Keep melody" remixes work on it), and
-the cached picture analysis the songwriter wrote.
+the cached picture analysis the songwriter wrote. Each also ships its take
+(`<name>.take.safetensors`: the music tokens and final latent of that exact
+recording), so a remix that only rewords some lines can keep the rest of the
+recording. `node scripts/example-takes.mjs` makes them, and writes one only
+when the song it performs is byte-identical to the shipped MP3.
 
 ## Provenance
 

@@ -50,6 +50,20 @@ export interface FakeWorld {
   planText: string;
   /** PreviewAny text for `seconds_out`: what YuE2 reports it wrote. */
   secondsText: string;
+  /** Whether ComfyUI has the studio's own nodes (object_info answers for Stillsong2*). */
+  takeNodes: boolean;
+  /** Every graph submitted, in order (an edit submits several). */
+  submittedGraphs: NonNullable<FakeWorld['submittedGraph']>[];
+  /**
+   * What the alignment node reports, per align prompt in order (the last one
+   * repeats): the per-frame drop series. Default: one clear dip.
+   */
+  alignSeries: number[][];
+}
+
+/** A flat series of `frames` values with a -2 dip over [from, to). */
+export function dipSeries(frames: number, from: number, to: number): number[] {
+  return Array.from({ length: frames }, (_, i) => (i >= from && i < to ? -2 : 0));
 }
 
 export function fakeHttp(): FakeWorld {
@@ -63,12 +77,23 @@ export function fakeHttp(): FakeWorld {
     llmHealthy: true,
     planText: 'X:1\nK:C\n% verse\nV: Vocal\nc4d4e4f4|',
     secondsText: '42.4',
+    takeNodes: false,
+    submittedGraphs: [],
+    alignSeries: [dipSeries(1060, 500, 550)],
     http: null!,
   };
+  let alignCalls = 0;
+  /** Graph submitted under each prompt id, so /history answers for that prompt. */
+  const graphs = new Map<string, NonNullable<FakeWorld['submittedGraph']>>();
+  const alignText = new Map<string, string>();
   w.http = {
     async get(url) {
       if (url.endsWith('/queue')) return { status: 200, body: JSON.stringify({ queue_running: [], queue_pending: [] }) };
       if (url.endsWith('/health')) return w.llmHealthy ? { status: 200, body: '{"status":"ok"}' } : { status: 503, body: '{}' };
+      if (url.includes('/object_info/')) {
+        const cls = url.split('/').pop()!;
+        return w.takeNodes && cls.startsWith('Stillsong2') ? { status: 200, body: JSON.stringify({ [cls]: {} }) } : { status: 404, body: '' };
+      }
       if (url.includes('/history/')) {
         const id = url.split('/').pop()!;
         if (w.historyStatus === 'down') throw new Error('connect ECONNREFUSED 127.0.0.1:17900');
@@ -81,11 +106,17 @@ export function fakeHttp(): FakeWorld {
             }),
           };
         }
-        const outputs: Record<string, unknown> = {
-          save: { audio: [{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2', type: 'output' }] },
-          seconds_out: { text: [w.secondsText] },
-        };
-        if (w.submittedGraph?.plan_out) outputs.plan_out = { text: [w.planText] };
+        const graph = graphs.get(id) ?? w.submittedGraph;
+        const outputs: Record<string, unknown> = {};
+        if (graph?.align) {
+          // An alignment prompt makes no audio: only the series.
+          outputs.align = { text: [alignText.get(id) ?? ''] };
+        } else {
+          outputs.save = { audio: [{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2', type: 'output' }] };
+          outputs.seconds_out = { text: [w.secondsText] };
+          if (graph?.plan_out) outputs.plan_out = { text: [w.planText] };
+          if (graph?.take) outputs.take = { stillsong_take: [{ filename: 'x_00002_.take.safetensors', subfolder: 'audio\\stillsong2', type: 'output' }] };
+        }
         return {
           status: 200,
           body: JSON.stringify({
@@ -99,8 +130,17 @@ export function fakeHttp(): FakeWorld {
       w.posts.push({ url, body });
       if (url.endsWith('/prompt')) {
         w.events.push('submit');
-        w.submittedGraph = (body as { prompt: FakeWorld['submittedGraph'] }).prompt;
-        return { status: 200, body: JSON.stringify({ prompt_id: 'pid-1' }) };
+        const graph = (body as { prompt: NonNullable<FakeWorld['submittedGraph']> }).prompt;
+        w.submittedGraph = graph;
+        w.submittedGraphs.push(graph);
+        const id = `pid-${w.submittedGraphs.length}`;
+        graphs.set(id, graph);
+        if (graph.align) {
+          const drop = w.alignSeries[Math.min(alignCalls, w.alignSeries.length - 1)];
+          alignCalls += 1;
+          alignText.set(id, JSON.stringify({ frames: drop.length, drop }));
+        }
+        return { status: 200, body: JSON.stringify({ prompt_id: id }) };
       }
       if (url.endsWith('/v1/chat/completions')) {
         const req = body as { messages: { role: string; content: unknown }[]; response_format?: unknown };
@@ -125,6 +165,8 @@ export function fakeFiles(): FileStore & {
   /** What `examplesDir()` reports; null = no examples bundled. */
   examplesRoot: string | null;
   imported: { src: string; relPath: string }[];
+  uploaded: { url: string; relPath: string; fileName: string; fields: Record<string, string> }[];
+  uploadFails: boolean;
 } {
   const f = {
     downloaded: [] as string[],
@@ -137,6 +179,9 @@ export function fakeFiles(): FileStore & {
     existing: true,
     examplesRoot: null as string | null,
     imported: [] as { src: string; relPath: string }[],
+    /** Every `upload` call (a take sent to the studio). */
+    uploaded: [] as { url: string; relPath: string; fileName: string; fields: Record<string, string> }[],
+    uploadFails: false,
     async libraryDir() {
       return 'C:\\lib';
     },
@@ -146,6 +191,12 @@ export function fakeFiles(): FileStore & {
     async download(url: string, relPath: string) {
       f.downloaded.push(url);
       return `C:\\lib\\${relPath}`;
+    },
+    async upload(url: string, relPath: string, fileName: string, fields: Record<string, string>) {
+      f.uploaded.push({ url, relPath, fileName, fields });
+      return f.uploadFails
+        ? { status: 500, body: 'upload failed' }
+        : { status: 200, body: JSON.stringify({ name: fileName, subfolder: fields.subfolder ?? '', type: fields.type ?? 'input' }) };
     },
     async importFile(src: string, relPath: string) {
       f.imported.push({ src, relPath });

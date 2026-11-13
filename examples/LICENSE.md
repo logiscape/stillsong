@@ -2,8 +2,9 @@
 
 The files in this folder — the photographs `moonlit-forest.jpg` and
 `roller-coaster.jpg`, the sketch `spark.png`, the songs
-`where-the-old-gods-stood.mp3`, `iron-ghost.mp3` and `the-last-ember.mp3`, and
-the captions, lyrics and melody plans in `examples.json` — are:
+`where-the-old-gods-stood.mp3`, `iron-ghost.mp3` and `the-last-ember.mp3`, their
+take files (`*.take.safetensors`), and the captions, lyrics and melody plans in
+`examples.json` — are:
 
 **© 2026 Logiscape LLC**, licensed under the
 **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.

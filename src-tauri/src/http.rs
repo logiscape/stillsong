@@ -157,9 +157,71 @@ pub async fn http_download(
     Ok(dest.to_string_lossy().into_owned())
 }
 
+/// A bare file name for an upload: no path separators, no `..`, not empty.
+fn upload_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name == "." || name.contains("..") || name.contains(['/', '\\', ':']) {
+        return Err(format!("refused: {name} is not a plain file name"));
+    }
+    Ok(name)
+}
+
+/// Sends one library file to a loopback URL as multipart form data: the file
+/// in field `image` (ComfyUI's `/upload/image` takes any file there), plus the
+/// given text fields. This is how a saved take reaches the studio for a "keep
+/// the rest" edit. Like every bridge call it only talks to loopback, and it
+/// can only read inside the library.
+#[tauri::command]
+pub async fn http_upload(
+    app: tauri::AppHandle,
+    url: String,
+    rel_path: String,
+    file_name: String,
+    fields: std::collections::HashMap<String, String>,
+) -> Result<HttpResult, String> {
+    let url = loopback_url(&url, &["http"])?;
+    let src = library_relative(&crate::files::library_root(&app)?, &rel_path)?;
+    let name = upload_name(&file_name)?.to_string();
+    let bytes = tokio::fs::read(&src).await.map_err(|e| e.to_string())?;
+    let mut form = reqwest::multipart::Form::new().part(
+        "image",
+        reqwest::multipart::Part::bytes(bytes).file_name(name),
+    );
+    for (key, value) in fields {
+        form = form.text(key, value);
+    }
+    let resp = client()
+        .post(url)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+    Ok(HttpResult { status, body })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upload_names_are_plain_file_names() {
+        for ok in ["ab12cd34.take.safetensors", "a b.bin"] {
+            assert!(upload_name(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../x.bin",
+            "sub/x.bin",
+            r"sub\x.bin",
+            r"C:\x.bin",
+            "x..bin",
+        ] {
+            assert!(upload_name(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn loopback_forms_are_accepted() {

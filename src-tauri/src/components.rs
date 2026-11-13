@@ -839,10 +839,45 @@ mod tests {
         eprintln!("torch: {out}");
         assert!(out.contains("+cu130"), "{out}");
 
-        // Stillsong 2 builds its graphs from ComfyUI's core YuE2 nodes (no
-        // custom nodes): the pinned commit must ship them.
+        // Stillsong 2 builds its graphs from ComfyUI's core YuE2 nodes plus
+        // its own first-party package: the pinned commit must ship the former.
         for f in ["comfy_extras/nodes_yue2.py", "comfy/text_encoders/yue2.py"] {
             assert!(comp.join("ComfyUI").join(f).is_file(), "missing {f}");
+        }
+
+        // The first-party node package was derived from one exact yue2.py and
+        // refuses to load against any other, so its pin must be the pinned
+        // ComfyUI's file; and it must byte-compile with the bundled Python.
+        {
+            use sha2::{Digest, Sha256};
+            let yue2 = std::fs::read(
+                comp.join("ComfyUI")
+                    .join("comfy")
+                    .join("text_encoders")
+                    .join("yue2.py"),
+            )
+            .unwrap();
+            let digest = format!("{:x}", Sha256::digest(&yue2));
+            assert_eq!(
+                crate::nodes::pinned_yue2_sha256(),
+                Some(digest.as_str()),
+                "comfy-nodes is pinned to another yue2.py: re-derive stillsong2_ar.py"
+            );
+            let scratch = comp.join("_nodes-check");
+            crate::nodes::install(&scratch).unwrap();
+            for (name, _) in crate::nodes::FILES
+                .iter()
+                .filter(|(n, _)| n.ends_with(".py"))
+            {
+                let mut compile = std::process::Command::new(
+                    comp.join("python-env").join("Scripts").join("python.exe"),
+                );
+                compile
+                    .args(["-I", "-m", "py_compile"])
+                    .arg(scratch.join(crate::nodes::PACKAGE).join(name));
+                run_capture(compile).unwrap_or_else(|e| panic!("{name}: {e}"));
+            }
+            std::fs::remove_dir_all(&scratch).unwrap();
         }
 
         // Idempotent: a second bootstrap is a no-op that still succeeds.

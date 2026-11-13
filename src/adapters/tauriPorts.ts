@@ -4,7 +4,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import type {
-  Clock, ComfyOutputRef, Db, FileStore, HardwareInfo, HttpTransport, Ports, Runtime, RuntimeInstallState, ServiceState, ThumbnailInfo, WsEventHandler, WsTransport,
+  Clock, ComfyOutputRef, Db, FileStore, HardwareInfo, HttpResponse, HttpTransport, Ports, Runtime, RuntimeInstallState, ServiceState, ThumbnailInfo, WsEventHandler, WsTransport,
 } from '@engine/ports';
 import { newId } from '@engine/ports';
 
@@ -58,6 +58,11 @@ class TauriFiles implements FileStore {
   async download(url: string, relPath: string): Promise<string> {
     // Rust resolves relPath inside the library and refuses anything else.
     return invoke<string>('http_download', { url, relPath });
+  }
+
+  async upload(url: string, relPath: string, fileName: string, fields: Record<string, string>): Promise<HttpResponse> {
+    // Rust reads relPath inside the library only, and only posts to loopback.
+    return invoke<HttpResponse>('http_upload', { url, relPath, fileName, fields });
   }
 
   async importFile(srcPath: string, relPath: string): Promise<string> {

@@ -1,5 +1,7 @@
-// Typed constructors for the ComfyUI API-format nodes the YuE2 graph uses.
-// ComfyUI core nodes only (no custom nodes). Link = [sourceNodeId, outputIndex].
+// Typed constructors for the ComfyUI API-format nodes the YuE2 graphs use:
+// ComfyUI core nodes, plus Stillsong 2's own first-party package
+// (comfy-nodes/ComfyUI-Stillsong2, the Stillsong2* nodes at the end). No
+// third-party custom nodes. Link = [sourceNodeId, outputIndex].
 
 export type Link = [string, number];
 export type NodeInputs = Record<string, string | number | boolean | Link>;
@@ -127,4 +129,91 @@ export const vaeDecodeAudio = (samples: Link, vae: Link): ApiNode => ({
 export const saveAudioMp3 = (audio: Link, filenamePrefix: string, quality: 'V0' | '128k' | '320k'): ApiNode => ({
   class_type: 'SaveAudioAdvanced',
   inputs: { audio, filename_prefix: filenamePrefix, format: 'mp3', 'format.quality': quality },
+});
+
+// ---- Stillsong 2's own nodes (comfy-nodes/ComfyUI-Stillsong2) --------------
+
+/** The node whose presence means the studio's own package loaded. */
+export const TAKE_NODE = 'Stillsong2Perform';
+
+/**
+ * Frame windows as the nodes take them: "583-662,2264-2338" (half-open,
+ * ascending). Always a string: ComfyUI reads a two-element array as a link.
+ */
+export const frameRanges = (windows: readonly (readonly [number, number])[]): string =>
+  windows.map(([a, b]) => `${a}-${b}`).join(',');
+
+/**
+ * YuE2GenerateMusic with a third output, the music tokens it wrote (the same
+ * performance for the same seed: it runs upstream's own sampling). With
+ * `tokens` + `redo` it performs that take again, singing only the redo
+ * windows anew. Outputs: 0 CONDITIONING, 1 seconds, 2 tokens.
+ */
+export const stillsong2Perform = (p: {
+  clip: Link;
+  style: string;
+  lyrics: string;
+  abc: string | Link;
+  seed: number;
+  mode: 'full' | 'melody';
+  maxDuration: number;
+  tokens?: Link;
+  redo?: string;
+}): ApiNode => ({
+  class_type: 'Stillsong2Perform',
+  inputs: {
+    clip: p.clip,
+    style: p.style,
+    lyrics: p.lyrics,
+    abc: p.abc,
+    seed: p.seed,
+    mode: p.mode,
+    max_duration: p.maxDuration,
+    temperature: 1.0,
+    top_p: 0.95,
+    top_k: 100,
+    repetition_penalty: 1.2,
+    ...(p.tokens ? { tokens: p.tokens, redo: p.redo ?? '' } : {}),
+  },
+});
+
+/** Writes the take (tokens + final latent) next to the audio; reported in /history as a file. */
+export const stillsong2SaveTake = (samples: Link, tokens: Link, filenamePrefix: string): ApiNode => ({
+  class_type: 'Stillsong2SaveTake',
+  inputs: { samples, tokens, filename_prefix: filenamePrefix },
+});
+
+/** Reads a take from ComfyUI's temp or output folder. Outputs: 0 tokens, 1 LATENT. */
+export const stillsong2LoadTake = (take: string): ApiNode => ({
+  class_type: 'Stillsong2LoadTake',
+  inputs: { take },
+});
+
+/** Marks the redo windows for the sampler; every other frame of the latent is held. */
+export const stillsong2HoldLatent = (samples: Link, redo: string): ApiNode => ({
+  class_type: 'Stillsong2HoldLatent',
+  inputs: { samples, redo },
+});
+
+/** After sampling: puts the take's own frames back outside the redo windows (bit-equal). */
+export const stillsong2RestoreLatent = (samples: Link, take: Link, redo: string): ApiNode => ({
+  class_type: 'Stillsong2RestoreLatent',
+  inputs: { samples, take, redo },
+});
+
+/**
+ * Where does a take sing words that sheet B no longer has? Its /history
+ * `text` is JSON `{ frames, drop: number[] }` (see domain/editWindows.ts).
+ */
+export const stillsong2Align = (p: {
+  clip: Link;
+  style: string;
+  abc: string;
+  mode: 'full' | 'melody';
+  tokens: Link;
+  lyricsA: string;
+  lyricsB: string;
+}): ApiNode => ({
+  class_type: 'Stillsong2Align',
+  inputs: { clip: p.clip, style: p.style, abc: p.abc, mode: p.mode, tokens: p.tokens, lyrics_a: p.lyricsA, lyrics_b: p.lyricsB },
 });

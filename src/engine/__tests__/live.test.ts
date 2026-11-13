@@ -30,6 +30,19 @@ async function audioHash(path: string): Promise<string> {
   return createHash('sha256').update(buf.subarray(off)).digest('hex');
 }
 
+/** A take file (safetensors): the per-frame codec codes and the raw float32 latent [64, frames]. */
+async function readTake(path: string): Promise<{ codes: Int16Array; latent: Buffer }> {
+  const buf = await fs.readFile(path);
+  const headerLength = Number(buf.readBigUInt64LE(0));
+  const header = JSON.parse(buf.subarray(8, 8 + headerLength).toString('utf8')) as Record<string, { data_offsets: [number, number] }>;
+  const data = buf.subarray(8 + headerLength);
+  const codes = data.subarray(...header.codes.data_offsets);
+  return {
+    codes: new Int16Array(codes.buffer.slice(codes.byteOffset, codes.byteOffset + codes.byteLength)),
+    latent: data.subarray(...header.latent.data_offsets),
+  };
+}
+
 describe.runIf(LIVE)('live: ComfyUI end-to-end', () => {
   it('connects and sees the YuE2 nodes and checkpoint', async () => {
     const engine = await Engine.create(livePorts());
@@ -110,6 +123,75 @@ describe.runIf(LIVE)('live: ComfyUI end-to-end', () => {
     expect(b.planAbc).toBe(a.planAbc);
     expect(b.actualSec).toBe(a.actualSec);
     expect(await audioHash(b.outputPath!)).toBe(await audioHash(a.outputPath!));
+  });
+
+  it('a "keep the rest" edit sings one line again and keeps everything else', { timeout: 900_000 }, async () => {
+    const engine = await Engine.create(livePorts({ ws: true }));
+    // Without the studio's own nodes this suite would only exercise the
+    // fallback: start ComfyUI with scripts/dev-comfy.ps1, which installs them.
+    expect(await engine.comfy.hasNode('Stillsong2Perform'), 'comfy-nodes/ComfyUI-Stillsong2 is not loaded').toBe(true);
+    const phases: string[] = [];
+    engine.on((e) => {
+      if (e.kind === 'progress' && phases[phases.length - 1] !== e.progress.phase) phases.push(e.progress.phase);
+    });
+    const nextOutcome = () =>
+      new Promise<string | undefined>((resolve) => {
+        const off = engine.on((e) => {
+          if (e.kind !== 'song_done' && e.kind !== 'song_failed') return;
+          off();
+          resolve(e.kind === 'song_done' ? undefined : (e.song.error ?? 'failed'));
+        });
+      });
+    const lyrics = '[Verse]\nMorning light on the kitchen floor\nCoffee steam and an open door\n[Outro]';
+    const spec = { ...defaultSpec(), title: 'Edit draft', caption: STOCK_CAPTION, lyrics, targetSec: 30, durationSec: 30, seed: '4242' };
+
+    let outcome = nextOutcome();
+    const first = await engine.enqueueSong(spec);
+    expect(await outcome).toBeUndefined();
+    const a = (await engine.songs.byId(first.id))!;
+    expect(a.takePath).toMatch(/\.take\.safetensors$/);
+    const before = await readTake(a.takePath!);
+    expect(before.codes.length).toBe(Math.round(a.actualSec! * 25));
+
+    outcome = nextOutcome();
+    const edited = lyrics.replace('Coffee steam and an open door', 'Winter rain on a rusted roof');
+    const second = await engine.enqueueSong({ ...spec, lyrics: edited, abc: a.planAbc, edit: { sourceId: a.id } }, a.id);
+    expect(await outcome).toBeUndefined();
+    const b = (await engine.songs.byId(second.id))!;
+    expect(b.status).toBe('done');
+    expect(b.parentId).toBe(a.id);
+    expect(b.actualSec).toBe(a.actualSec);
+    expect(b.planAbc).toBe(a.planAbc);
+    expect(b.editWindows?.length).toBeGreaterThan(0);
+    expect(phases).toContain('Composing (finding your lines)');
+    expect(phases).toContain('Saving (checking the new lines)');
+
+    // The new take is the old one outside the windows: same tokens, and a
+    // bit-equal latent (so the decoded audio there is the same recording).
+    const after = await readTake(b.takePath!);
+    const frames = before.codes.length;
+    expect(after.codes.length).toBe(frames);
+    const inside = (i: number) => b.editWindows!.some(([start, end]) => i >= start && i < end);
+    let keptTokens = true;
+    let changedTokens = 0;
+    for (let i = 0; i < frames; i++) {
+      if (inside(i)) changedTokens += before.codes[i] !== after.codes[i] ? 1 : 0;
+      else if (before.codes[i] !== after.codes[i]) keptTokens = false;
+    }
+    expect(keptTokens).toBe(true);
+    expect(changedTokens).toBeGreaterThan(0);
+    let keptLatent = true;
+    for (let channel = 0; channel < 64 && keptLatent; channel++) {
+      for (let i = 0; i < frames; i++) {
+        const at = (channel * frames + i) * 4;
+        if (!inside(i) && before.latent.readUInt32LE(at) !== after.latent.readUInt32LE(at)) {
+          keptLatent = false;
+          break;
+        }
+      }
+    }
+    expect(keptLatent).toBe(true);
+    expect(await audioHash(b.outputPath!)).not.toBe(await audioHash(a.outputPath!));
   });
 
   it('renders via the history-poll fallback when WS is unavailable', { timeout: 900_000 }, async () => {

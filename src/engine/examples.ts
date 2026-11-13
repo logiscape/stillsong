@@ -42,6 +42,12 @@ export interface ExampleSong {
   audio: string;
   /** The melody plan (ABC) the example performed, so "Keep melody" remixes work on it. */
   abc?: string;
+  /**
+   * The example's take file inside the examples dir (music tokens + final
+   * latent, made by scripts/example-takes.mjs), so "Keep the rest" edits work
+   * on it on any machine.
+   */
+  take?: string;
 }
 
 export interface ExamplesManifest {
@@ -89,6 +95,10 @@ export async function seedExamples(deps: SeedDeps): Promise<number> {
     const createdAt = now - i * 1000;
     const photo = await importExamplePhoto(ex.photo, dir, files, photos, createdAt);
     const outputPath = await files.importFile(joinPath(dir, ex.audio), `songs/${ex.id}.mp3`);
+    // A take that fails to copy only costs the example its partial edits.
+    const takePath = ex.take
+      ? await files.importFile(joinPath(dir, ex.take), `songs/${ex.id}.take.safetensors`).catch(() => undefined)
+      : undefined;
     await songs.insertFinished({
       id: ex.id,
       spec: { ...ex.spec, photo },
@@ -97,6 +107,7 @@ export async function seedExamples(deps: SeedDeps): Promise<number> {
       planAbc: ex.abc,
       actualSec: ex.actualSec,
       hitCeiling: ex.hitCeiling,
+      takePath,
     });
     added += 1;
   }

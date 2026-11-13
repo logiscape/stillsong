@@ -10,7 +10,7 @@ import { lintSong } from '@engine/cowriter/linter';
 import { estimateSeconds, wordCount } from '@engine/cowriter/lyrics';
 import { validateSpec } from '@engine/domain/validate';
 import { enqueueRemix, navigate, remixSpec, thumbSrc, useAppState } from '@state/store';
-import { canKeepMelody, offersMelodyChoice, remixNeedsNewSeed, remixTake } from '@state/remix';
+import { canKeepMelody, keepRestTake, keepsRestByDefault, offersKeepRest, offersMelodyChoice, remixNeedsNewSeed, remixTake, reshapesLyrics } from '@state/remix';
 import { fmtDuration } from '@ui/ds/format';
 import { Badge } from '@ui/ds/Badge';
 import { Button } from '@ui/ds/Button';
@@ -72,6 +72,10 @@ export function RemixScreen(): React.ReactElement | null {
   const melodyAvailable = !!original && canKeepMelody(original);
   const [melody, setMelody] = useState<'keep' | 'new'>(melodyAvailable ? 'keep' : 'new');
   const [planText, setPlanText] = useState(original?.planAbc ?? '');
+  // When only the words of existing lines changed: sing just those lines
+  // again and keep the rest of the recording, or all of it. Null until the
+  // person picks: the starting side then follows their other choices.
+  const [recording, setRecording] = useState<'rest' | 'all' | null>(null);
 
   if (!original || !spec) {
     navigate('sanctuary');
@@ -98,7 +102,18 @@ export function RemixScreen(): React.ReactElement | null {
     setSeedMode(v);
   };
 
+  const showRecording = offersKeepRest(original, spec, choice.editedAbc);
+  // Someone who already chose a new seed or a new melody asked for a different
+  // performance: rewording a line then starts on "Sing it all again", with
+  // their Feel and Melody choices still showing.
+  const recordingChoice = recording ?? (keepsRestByDefault(choice) ? 'rest' : 'all');
+  const keepingRest = showRecording && recordingChoice === 'rest';
+
   const create = () => {
+    if (keepingRest) {
+      void enqueueRemix(keepRestTake(original, spec), original.id);
+      return;
+    }
     const { seed, abc } = remixTake(original, spec, choice);
     void enqueueRemix({ ...spec, seed, abc }, original.id);
   };
@@ -131,12 +146,33 @@ export function RemixScreen(): React.ReactElement | null {
               <span style={{ font: 'var(--mono-sm)', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>≈{fmtDuration(est)} of song</span>
             </div>
           </div>
-          <SegmentedChoice
-            label="Feel" value={feel} onChange={(v) => pickFeel(v as 'keep' | 'new')}
-            options={[{ value: 'keep', label: 'Keep original', icon: 'lock' }, { value: 'new', label: 'New seed', icon: 'dices' }]}
-            style={{ maxWidth: 320 }}
-          />
-          {showMelody && (
+          {showRecording && (
+            <>
+              <SegmentedChoice
+                label="Recording" value={recordingChoice} onChange={(v) => setRecording(v as 'rest' | 'all')}
+                options={[{ value: 'rest', label: 'Keep the rest', icon: 'lock' }, { value: 'all', label: 'Sing it all again', icon: 'dices' }]}
+                style={{ maxWidth: 360 }}
+              />
+              <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: -8 }}>
+                {keepingRest
+                  ? 'Only the lines you changed are sung again. Everything else stays exactly as it was.'
+                  : 'The whole song is sung again with your new words.'}
+              </span>
+            </>
+          )}
+          {!showRecording && reshapesLyrics(original, spec) && (
+            <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)' }}>
+              Adding or removing lines changes the shape of the song, so all of it is sung again.
+            </span>
+          )}
+          {!keepingRest && (
+            <SegmentedChoice
+              label="Feel" value={feel} onChange={(v) => pickFeel(v as 'keep' | 'new')}
+              options={[{ value: 'keep', label: 'Keep original', icon: 'lock' }, { value: 'new', label: 'New seed', icon: 'dices' }]}
+              style={{ maxWidth: 320 }}
+            />
+          )}
+          {!keepingRest && showMelody && (
             <>
               <SegmentedChoice
                 label="Melody" value={melody} onChange={(v) => setMelody(v as 'keep' | 'new')}
@@ -146,7 +182,10 @@ export function RemixScreen(): React.ReactElement | null {
               <span style={{ font: 'var(--ui-sm)', color: 'var(--text-quiet)', marginTop: -8 }}>
                 {melody === 'keep'
                   ? seedMode === 'keep'
-                    ? 'Sings the original tune again. With nothing else changed it is the same take; your edits change how it is sung and played.'
+                    ? original.spec.edit
+                      // A partly re-sung version is not a recipe for the whole recording.
+                      ? 'Sings the original tune again. All of it is performed afresh, so voices and instruments can change.'
+                      : 'Sings the original tune again. With nothing else changed it is the same take; your edits change how it is sung and played.'
                     : 'Sings the original tune again with a new feel: voices and instruments can change.'
                   : 'Writes a new melody for the song, with a new feel.'}
               </span>

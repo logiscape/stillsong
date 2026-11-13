@@ -13,3 +13,6 @@ CLAUDE.local.md
 *.gguf
 *.safetensors
 *.whl
+# ...except the starter songs' takes (tokens + latent of the shipped MP3s, ~5 MB),
+# which the app bundles: without them "Keep the rest" is missing on every example.
+!examples/*.take.safetensors

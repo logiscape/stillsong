@@ -240,7 +240,7 @@ export async function bootstrap(created: Engine): Promise<void> {
         void refreshLists();
         break;
       case 'song_failed':
-        // The failed row keeps its spec, parent and prefix, so the Create flow
+        // The failed row keeps its spec and parent, so the Create flow
         // can offer to send that exact render back to the studio.
         setState({ creation: null, creationError: e.song.error ?? 'Something went wrong.', failedSong: e.song, screen: 'create' });
         void refreshLists();
@@ -378,6 +378,22 @@ export async function retryFailedSong(): Promise<void> {
   }
 }
 
+/**
+ * "Sing it all again" after a "keep the rest" edit failed: the same song goes
+ * back to the queue as an ordinary remix (its new words, the original's seed
+ * and melody), performed whole.
+ */
+export async function retryFailedSongWhole(): Promise<void> {
+  const song = state.failedSong;
+  if (!song) return;
+  try {
+    setState({ creationError: null, failedSong: null, creation: { stage: 'studio', title: song.spec.title, photo: song.spec.photo }, screen: 'create' });
+    await getEngine().retryWhole(song.id);
+  } catch (err) {
+    setState({ creation: null, failedSong: song, creationError: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function cancelCreation(): Promise<void> {
   const active = [...state.activeJobs, ...state.queuedJobs];
   for (const j of active) await getEngine().cancelJob(j.id);
@@ -385,9 +401,15 @@ export async function cancelCreation(): Promise<void> {
   await refreshLists();
 }
 
-/** Starting spec for the Remix editor: same everything, fresh seed; seed and plan are chosen on Create (`remixTake`). */
+/**
+ * Starting spec for the Remix editor: same everything, fresh seed; seed and
+ * plan are chosen on Create (`remixTake`, or `keepRestTake` for a partial
+ * edit). A song that was itself a partial edit starts as an ordinary draft:
+ * its `edit` marker is not inherited.
+ */
 export function remixSpec(song: Song): SongSpec {
-  return { ...song.spec, seed: randomSeed(), abc: undefined };
+  const { edit: _edit, ...spec } = song.spec;
+  return { ...spec, seed: randomSeed(), abc: undefined };
 }
 
 // ---- song actions ----------------------------------------------------------

@@ -5,6 +5,7 @@ mod gpu;
 mod http;
 mod identity;
 mod manifest;
+mod nodes;
 mod supervisor;
 mod ws;
 
@@ -47,6 +48,7 @@ pub fn run() {
             http::http_get,
             http::http_post_json,
             http::http_download,
+            http::http_upload,
             ws::ws_connect,
             ws::ws_close,
             files::files_library_dir,

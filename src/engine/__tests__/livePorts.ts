@@ -189,6 +189,13 @@ export function nodeFiles(rootDir: string): FileStore {
       await fs.writeFile(dest, Buffer.from(await r.arrayBuffer()));
       return dest;
     },
+    async upload(url, relPath, fileName, fields) {
+      const form = new FormData();
+      form.append('image', new Blob([await fs.readFile(path.join(rootDir, relPath))]), fileName);
+      for (const [key, value] of Object.entries(fields)) form.append(key, value);
+      const r = await fetch(url, { method: 'POST', body: form });
+      return { status: r.status, body: await r.text() };
+    },
     async importFile(srcPath, relPath) {
       const dest = path.join(rootDir, relPath);
       await fs.mkdir(path.dirname(dest), { recursive: true });
