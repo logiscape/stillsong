@@ -23,6 +23,7 @@ import info from 'lucide-static/icons/info.svg?url';
 import layers from 'lucide-static/icons/layers.svg?url';
 import layoutGrid from 'lucide-static/icons/layout-grid.svg?url';
 import lock from 'lucide-static/icons/lock.svg?url';
+import map from 'lucide-static/icons/map.svg?url';
 import mic from 'lucide-static/icons/mic.svg?url';
 import music from 'lucide-static/icons/music.svg?url';
 import paintBucket from 'lucide-static/icons/paint-bucket.svg?url';
@@ -71,6 +72,7 @@ export const ICONS: Record<string, string> = {
   layers,
   'layout-grid': layoutGrid,
   lock,
+  map,
   mic,
   music,
   'paint-bucket': paintBucket,

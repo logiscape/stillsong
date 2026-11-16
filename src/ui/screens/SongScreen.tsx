@@ -73,8 +73,12 @@ export function SongScreen(): React.ReactElement | null {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const photo = photoSrc(song.spec.photo);
 
+  // The map is drawn from the melody plan; a song performed without one has none.
+  const hasMap = !!song.planAbc?.trim();
+
   const menuItems: [string, string, () => void][] = [
     ['shuffle', 'Remix this song', () => navigate('remix')],
+    ...(hasMap ? ([['map', 'Song map', () => navigate('map')]] as [string, string, () => void][]) : []),
     ['download', 'Save a copy…', () => void exportSong(song)],
     ['folder-open', 'Reveal in folder', () => void revealSong(song)],
     ['pencil-line', 'Rename', () => setRenaming(song.spec.title)],
@@ -87,6 +91,7 @@ export function SongScreen(): React.ReactElement | null {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 22px' }}>
         <IconButton icon="chevron-left" label="Close" variant="glass" onClick={() => { stopPlayback(); navigate('sanctuary'); }} />
         <div style={{ flex: 1 }} />
+        {hasMap && <IconButton icon="map" label="Song map" variant="glass" onClick={() => navigate('map')} />}
         <IconButton icon="shuffle" label="Remix" variant="glass" onClick={() => navigate('remix')} />
         <IconButton icon="ellipsis" label="More" variant="glass" onClick={() => setMenu(!menu)} />
       </div>

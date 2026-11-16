@@ -13,6 +13,7 @@ import { AboutScreen } from './screens/AboutScreen';
 import { SetupScreen } from './screens/SetupScreen';
 import { UpdateScreen } from './screens/UpdateScreen';
 import { DrawScreen } from './screens/draw/DrawScreen';
+import { SongMapScreen } from './screens/map/SongMapScreen';
 
 const NAV: { id: Screen; icon: string; label: string }[] = [
   { id: 'create', icon: 'image-plus', label: 'Create' },
@@ -70,6 +71,7 @@ export function App(): React.ReactElement {
         {s.screen === 'create' && <CreateScreen />}
         {s.screen === 'sanctuary' && <SanctuaryScreen />}
         {s.screen === 'song' && <SongScreen />}
+        {s.screen === 'map' && <SongMapScreen />}
         {s.screen === 'remix' && <RemixScreen />}
         {s.screen === 'about' && <AboutScreen />}
         {s.screen === 'draw' && <DrawScreen />}

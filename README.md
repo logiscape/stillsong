@@ -57,6 +57,9 @@ and your art always remains yours.
 - **Listen.** The Sanctuary is a full-screen player: photo as the room, lyrics
   as a drifting sheet, glass controls. Remixes of a song are kept together as
   versions so you can audition takes side by side.
+- **Song map.** See how a song is put together: its parts, the phrases that
+  share a tune, and every note the singer and the instrument were given. Listen
+  to the recording, or to the melody plan on its own as a music box.
 - **Remix.** Edit the lyrics or caption and record a new version. The composer
   first writes a melody plan (a short score of notes and chords) and then
   performs it; a remix can keep that melody while you change the words, the

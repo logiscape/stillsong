@@ -14,7 +14,7 @@ import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
 import { routeForBoot } from './route';
 
-export type Screen = 'setup' | 'update' | 'create' | 'sanctuary' | 'song' | 'remix' | 'about' | 'draw';
+export type Screen = 'setup' | 'update' | 'create' | 'sanctuary' | 'song' | 'map' | 'remix' | 'about' | 'draw';
 
 export interface CreationState {
   stage: CreationStage;
@@ -135,6 +135,48 @@ export function playSong(song: Song): void {
       volume: state.playback?.volume ?? 0.8,
     },
   });
+}
+
+/**
+ * Plays a song from a given second, loading it first when another song (or
+ * none) is in the player. The song map's transport: it starts from wherever
+ * its playhead was put.
+ */
+export function playSongFrom(song: Song, sec: number): void {
+  if (!song.outputPath) return;
+  const volume = state.playback?.volume ?? 0.8;
+  const loaded = state.playback?.songId === song.id;
+  if (!loaded) {
+    audio.src = convertFileSrc(song.outputPath);
+    audio.volume = volume;
+  }
+  // Before the file's metadata arrives this sets where playback will begin.
+  audio.currentTime = Math.max(0, sec);
+  void audio.play();
+  setState({
+    playback: {
+      songId: song.id,
+      positionSec: Math.max(0, sec),
+      durationSec: loaded ? state.playback!.durationSec : song.actualSec ?? 0,
+      isPlaying: true,
+      volume,
+    },
+  });
+}
+
+export function pausePlayback(): void {
+  if (!state.playback) return;
+  audio.pause();
+  setState({ playback: { ...state.playback, isPlaying: false } });
+}
+
+/**
+ * Where the shared player is right now, in seconds. `playback.positionSec`
+ * follows the player's own progress events (about four a second), too coarse
+ * to draw a moving playhead from.
+ */
+export function playbackTime(): number {
+  return audio.currentTime;
 }
 
 export function togglePlay(): void {
