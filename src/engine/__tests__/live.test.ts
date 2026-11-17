@@ -6,6 +6,8 @@ import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Engine, type JobProgress } from '@engine/index';
 import { defaultSpec, YUE2_CHECKPOINT } from '@engine/domain/types';
+import { stepNote } from '@engine/domain/melodyPlan';
+import { buildSongMap } from '@engine/domain/songMap';
 import { livePorts } from './livePorts';
 
 const LIVE = process.env.STILLSONG2_LIVE === '1';
@@ -170,6 +172,82 @@ describe.runIf(LIVE)('live: ComfyUI end-to-end', () => {
     // bit-equal latent (so the decoded audio there is the same recording).
     const after = await readTake(b.takePath!);
     const frames = before.codes.length;
+    expect(after.codes.length).toBe(frames);
+    const inside = (i: number) => b.editWindows!.some(([start, end]) => i >= start && i < end);
+    let keptTokens = true;
+    let changedTokens = 0;
+    for (let i = 0; i < frames; i++) {
+      if (inside(i)) changedTokens += before.codes[i] !== after.codes[i] ? 1 : 0;
+      else if (before.codes[i] !== after.codes[i]) keptTokens = false;
+    }
+    expect(keptTokens).toBe(true);
+    expect(changedTokens).toBeGreaterThan(0);
+    let keptLatent = true;
+    for (let channel = 0; channel < 64 && keptLatent; channel++) {
+      for (let i = 0; i < frames; i++) {
+        const at = (channel * frames + i) * 4;
+        if (!inside(i) && before.latent.readUInt32LE(at) !== after.latent.readUInt32LE(at)) {
+          keptLatent = false;
+          break;
+        }
+      }
+    }
+    expect(keptLatent).toBe(true);
+    expect(await audioHash(b.outputPath!)).not.toBe(await audioHash(a.outputPath!));
+  });
+
+  it('a melody edit sings the changed bars again and keeps everything else', { timeout: 900_000 }, async () => {
+    const engine = await Engine.create(livePorts({ ws: true }));
+    expect(await engine.comfy.hasNode('Stillsong2Resing'), 'comfy-nodes/ComfyUI-Stillsong2 is not loaded, or is an older one').toBe(true);
+    const phases: string[] = [];
+    engine.on((e) => {
+      if (e.kind === 'progress' && phases[phases.length - 1] !== e.progress.phase) phases.push(e.progress.phase);
+    });
+    const nextOutcome = () =>
+      new Promise<string | undefined>((resolve) => {
+        const off = engine.on((e) => {
+          if (e.kind !== 'song_done' && e.kind !== 'song_failed') return;
+          off();
+          resolve(e.kind === 'song_done' ? undefined : (e.song.error ?? 'failed'));
+        });
+      });
+    const lyrics = '[Verse]\nMorning light on the kitchen floor\nCoffee steam and an open door\nA paper boat on the window sill\nThe radio plays and the house is still\n[Outro]';
+    const spec = { ...defaultSpec(), title: 'Melody draft', caption: STOCK_CAPTION, lyrics, targetSec: 30, durationSec: 60, seed: '4243' };
+
+    let outcome = nextOutcome();
+    const first = await engine.enqueueSong(spec);
+    expect(await outcome).toBeUndefined();
+    const a = (await engine.songs.byId(first.id))!;
+    const before = await readTake(a.takePath!);
+    const frames = before.codes.length;
+
+    // Where the bars fall is found from the audio in the app; here the plan's
+    // tempo stands in, which is enough to say which frames may change.
+    const map = buildSongMap(a.planAbc!, lyrics)!;
+    await engine.saveBarGrid(a.id, { v: 1, shifts: map.phrases.map(() => 0) });
+    // The first sung note that can be moved, in a phrase the recording holds whole.
+    const barFrames = map.ctx.secPerBar * 25;
+    let edited: string | null = null;
+    for (const [phrase, p] of map.phrases.entries()) {
+      if ((p.start + p.phrase.bars) * barFrames > frames - 50) break;
+      for (let note = 0; note < p.phrase.vocal.length && !edited; note++) edited = stepNote(a.planAbc!, { phrase, voice: 'vocal', note }, 2);
+      if (edited) break;
+    }
+    expect(edited, 'no sung note to move in the plan the studio wrote').toBeTruthy();
+
+    outcome = nextOutcome();
+    const second = await engine.enqueueSong({ ...spec, seed: '9001', abc: edited!, edit: { sourceId: a.id } }, a.id);
+    expect(await outcome).toBeUndefined();
+    const b = (await engine.songs.byId(second.id))!;
+    expect(b.status).toBe('done');
+    expect(b.actualSec).toBe(a.actualSec);
+    expect(b.planAbc).toBe(edited);
+    expect(['9001', '9002', '9003', '9004', '9005']).toContain(b.spec.seed);
+    expect(b.editWindows?.length).toBe(1);
+    expect(b.barGrid).toBeTruthy();
+    expect(phases).toContain('Composing (trying the new notes)');
+
+    const after = await readTake(b.takePath!);
     expect(after.codes.length).toBe(frames);
     const inside = (i: number) => b.editWindows!.some(([start, end]) => i >= start && i < end);
     let keptTokens = true;

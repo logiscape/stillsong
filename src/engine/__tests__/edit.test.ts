@@ -3,7 +3,7 @@
 // with only the changed lines re-sung (align -> perform -> check).
 
 import { describe, expect, it } from 'vitest';
-import { Engine, takeRelPath } from '@engine/index';
+import { Engine, HARVEST_PHASE, takeRelPath } from '@engine/index';
 import { defaultSpec, type Song, type SongSpec } from '@engine/domain/types';
 import { editWindows, mergeWindows } from '@engine/domain/editWindows';
 import { frameRanges } from '@engine/comfy/nodes';
@@ -123,11 +123,11 @@ describe('keep the rest', () => {
       {
         url: 'http://comfy.test/upload/image',
         relPath: takeRelPath(original.id),
-        fileName: `${original.id.slice(0, 8)}.take.safetensors`,
+        fileName: expect.stringMatching(new RegExp(`^${original.id.slice(0, 8)}_\\w{6}\\.take\\.safetensors$`)),
         fields: { type: 'temp', subfolder: 'stillsong2', overwrite: 'true' },
       },
     ]);
-    const tempName = `stillsong2/${original.id.slice(0, 8)}.take.safetensors [temp]`;
+    const tempName = `stillsong2/${files.uploaded[0].fileName} [temp]`;
     expect(align.source.inputs.take).toBe(tempName);
     expect(align.align.inputs).toMatchObject({ lyrics_a: original.spec.lyrics, lyrics_b: queued.spec.lyrics, abc: original.planAbc, tokens: ['source', 0] });
 
@@ -274,6 +274,33 @@ describe('keep the rest', () => {
     expect(cancelled.status).toBe('cancelled');
     expect(world.submittedGraphs).toHaveLength(2); // no edit prompt was sent
     // The next job is not affected by the remembered cancel.
+    world.historyStatus = 'running';
+    const next = await engine.enqueueSong(spec());
+    await flush();
+    expect((await settle(engine, world, clock, next.id)).status).toBe('done');
+  });
+
+  it('a cancel that comes while the version is copied into the library is too late: the version is saved', async () => {
+    const { engine, world, clock, files, original } = await rendered();
+    world.alignSeries = [LINE, FLAT];
+    const phases: string[] = [];
+    engine.on((e) => { if (e.kind === 'progress') phases.push(e.progress.phase); });
+    let cancelledAt = '';
+    files.onDownload = async () => {
+      files.onDownload = undefined;
+      const [job] = await engine.jobs.active();
+      cancelledAt = `${job.state}, ${phases[phases.length - 1]}`;
+      await engine.cancelJob(job.id);
+    };
+    const queued = await engine.enqueueSong(editOf(original), original.id);
+    await flush();
+    const version = await settle(engine, world, clock, queued.id);
+    // The phase is how the map knows to stop offering Stop (state/mapEdit.ts, beyondStopping).
+    expect(cancelledAt).toBe(`harvesting, ${HARVEST_PHASE}`);
+    expect(version.status).toBe('done');
+    expect(version.outputPath).toBe(`C:\\lib\\songs/${version.id}.mp3`);
+    expect(version.takePath).toBe(`C:\\lib\\${takeRelPath(version.id)}`);
+    // The cancel is not held against the next job.
     world.historyStatus = 'running';
     const next = await engine.enqueueSong(spec());
     await flush();

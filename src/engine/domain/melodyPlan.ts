@@ -14,6 +14,10 @@ export interface PlanNote {
   midi: number;
   /** Tied into the next note. */
   tie: boolean;
+  /** Where the note is written: which of the phrase's lines, which bar of its voice, and the characters of its pitch (accidental, letter, octave marks). */
+  line: number;
+  bar: number;
+  at: [start: number, end: number];
 }
 
 export interface PlanChord {
@@ -160,7 +164,7 @@ function lengthOf(count: string | undefined, slashes: string | undefined, diviso
 }
 
 /** `spend(n)` is told of every n bars before they are built, and throws when the plan has written too many. */
-function parseLine(text: string, ctx: PlanContext, spend: (bars: number) => void): RawBar[] {
+function parseLine(text: string, ctx: PlanContext, spend: (bars: number) => void, line: number): RawBar[] {
   const bars: RawBar[] = [];
   let bar: RawBar = { len: 0, notes: [], chords: [] };
   let wholeBars = 0;
@@ -189,7 +193,8 @@ function parseLine(text: string, ctx: PlanContext, spend: (bars: number) => void
       const pitch = letter + octave;
       if (m[2]) held[pitch] = ACCIDENTAL[m[2]];
       const shift = held[pitch] ?? ctx.keyAcc[letter] ?? 0;
-      bar.notes.push({ pos: bar.len, dur, midi: 60 + BASE[letter] + 12 * octave + shift, tie: !!m[8] });
+      const at: [number, number] = [m.index, m.index + (m[2]?.length ?? 0) + 1 + m[4].length];
+      bar.notes.push({ pos: bar.len, dur, midi: 60 + BASE[letter] + 12 * octave + shift, tie: !!m[8], line, bar: 0, at });
       bar.len += dur;
     } else if (m[9]) {
       // Z is a whole bar of rest (Z3: three of them); z and x are rests of a length, like a note.
@@ -210,21 +215,18 @@ function parseLine(text: string, ctx: PlanContext, spend: (bars: number) => void
 function buildPhrase(lines: string[], ctx: PlanContext, spend: (bars: number) => void): PlanPhrase {
   const lanes: { Vocal: RawBar[]; Ins: RawBar[] } = { Vocal: [], Ins: [] };
   let voice: 'Vocal' | 'Ins' = 'Vocal';
-  for (const l of lines) {
+  lines.forEach((l, li) => {
     const v = VOICE_LINE.exec(l);
-    if (v) {
-      voice = v[1] === 'Ins' ? 'Ins' : 'Vocal';
-      continue;
-    }
-    if (l.trim()) for (const b of parseLine(l, ctx, spend)) lanes[voice].push(b);
-  }
+    if (v) voice = v[1] === 'Ins' ? 'Ins' : 'Vocal';
+    else if (l.trim()) for (const b of parseLine(l, ctx, spend, li)) lanes[voice].push(b);
+  });
   const units = ctx.barUnits;
   // A bar written too long is squeezed into its bar so later bars stay in place.
   const squeeze = (b: RawBar) => (b.len > units ? units / b.len : 1);
   const flat = (bars: RawBar[]): PlanNote[] =>
     bars.flatMap((b, bi) => {
       const s = squeeze(b);
-      return b.notes.map((n) => ({ pos: bi * units + n.pos * s, dur: n.dur * s, midi: n.midi, tie: n.tie }));
+      return b.notes.map((n) => ({ ...n, pos: bi * units + n.pos * s, dur: n.dur * s, bar: bi }));
     });
   const vocal = flat(lanes.Vocal);
   const ins = flat(lanes.Ins);
@@ -345,6 +347,98 @@ export function serializePlan(
     for (const p of s.phrases) out.push(...p.lines);
   }
   return out.concat(tail).join('\n');
+}
+
+const LETTERS = 'CDEFGAB';
+const WRITTEN: Record<string, string> = { '-2': '__', '-1': '_', '0': '=', '1': '^', '2': '^^' };
+const PITCH = /^(\^\^|\^|__|_|=)?([A-Ga-g])([,']*)$/;
+/** The lowest and highest pitch a note may be moved to (C2 to C7). */
+const REACH = [36, 96];
+
+interface Written { accidental: number | null; letter: string; octave: number }
+
+function readPitch(text: string): Written {
+  const m = PITCH.exec(text)!;
+  const letter = m[2].toUpperCase();
+  let octave = m[2] === letter ? 0 : 1;
+  for (const mark of m[3]) octave += mark === ',' ? -1 : 1;
+  return { accidental: m[1] ? ACCIDENTAL[m[1]] : null, letter, octave };
+}
+
+function writePitch(w: Written): string {
+  const name = w.octave >= 1 ? w.letter.toLowerCase() + "'".repeat(w.octave - 1) : w.letter + ','.repeat(-w.octave);
+  return (w.accidental === null ? '' : WRITTEN[w.accidental]) + name;
+}
+
+/** Which note of a plan: the phrase (counted through the whole song), the voice, and the note within it. */
+export interface NoteRef {
+  phrase: number;
+  voice: 'vocal' | 'ins';
+  note: number;
+}
+
+/**
+ * The plan with one note moved `steps` steps of its key's scale (a note tied
+ * to its neighbours moves with them). Only the bars that hold it are
+ * rewritten, and every other note in them keeps its pitch: an accidental is
+ * added where the move would otherwise change one. Null when the note cannot
+ * be moved: it is not there, it is tied into the next phrase or out of the one
+ * before, or the move leaves the range.
+ */
+export function stepNote(abc: string, ref: NoteRef, steps: number): string | null {
+  const plan = parsePlan(abc);
+  const phrases = plan.sections.flatMap((s) => s.phrases);
+  const phrase = phrases[ref.phrase];
+  const notes = phrase?.[ref.voice];
+  const target = notes?.[ref.note];
+  if (!target || !steps) return null;
+
+  // The run of tied notes it belongs to.
+  let first = ref.note;
+  let last = ref.note;
+  while (first > 0 && notes[first - 1].tie && notes[first - 1].midi === target.midi) first--;
+  while (notes[last].tie && last + 1 < notes.length && notes[last + 1].midi === target.midi) last++;
+  if (notes[last].tie && last === notes.length - 1) return null;
+  const before = first === 0 ? phrases[ref.phrase - 1]?.[ref.voice] : undefined;
+  if (before?.length && before[before.length - 1].tie && before[before.length - 1].midi === target.midi) return null;
+
+  const from = readPitch(phrase.lines[target.line].slice(target.at[0], target.at[1]));
+  const place = LETTERS.indexOf(from.letter) + from.octave * 7 + steps;
+  const letter = LETTERS[((place % 7) + 7) % 7];
+  const octave = Math.floor(place / 7);
+  const natural = (l: string, o: number) => 60 + BASE[l] + 12 * o;
+  const moved = natural(letter, octave) + (plan.ctx.keyAcc[letter] ?? 0);
+  if (moved < REACH[0] || moved > REACH[1]) return null;
+
+  // Every bar the run touches is spelled anew. The notes are read from the
+  // lines as they stand and the new spellings put in afterwards, from the
+  // right: a note that grows or shrinks ("B," to "C") would otherwise move
+  // everything written after it on its line, and a run tied across a bar line
+  // has more to rewrite there.
+  const touched = new Set<string>();
+  for (let i = first; i <= last; i++) touched.add(`${notes[i].line}:${notes[i].bar}`);
+  const rewrites: { n: PlanNote; text: string }[] = [];
+  for (const key of touched) {
+    const inBar = notes.map((n, i) => ({ n, i })).filter(({ n }) => `${n.line}:${n.bar}` === key);
+    const state: Record<string, number> = {};
+    for (const { n, i } of inBar) {
+      const was = readPitch(phrase.lines[n.line].slice(n.at[0], n.at[1]));
+      const run = i >= first && i <= last;
+      const now: Written = run ? { accidental: null, letter, octave } : was;
+      const want = (run ? moved : n.midi) - natural(now.letter, now.octave);
+      const slot = now.letter + now.octave;
+      const implied = state[slot] ?? plan.ctx.keyAcc[now.letter] ?? 0;
+      // A note that stays keeps what it was written with; an accidental is added only where its pitch would change.
+      const accidental = !run && was.accidental !== null ? was.accidental : want === implied ? null : want;
+      if (accidental !== null) state[slot] = accidental;
+      rewrites.push({ n, text: writePitch({ ...now, accidental }) });
+    }
+  }
+  const lines = phrase.lines.slice();
+  for (const { n, text } of rewrites.sort((a, b) => b.n.at[0] - a.n.at[0])) lines[n.line] = lines[n.line].slice(0, n.at[0]) + text + lines[n.line].slice(n.at[1]);
+  let index = 0;
+  const sections = plan.sections.map((s) => ({ headLine: s.headLine, phrases: s.phrases.map((p) => ({ lines: index++ === ref.phrase ? lines : p.lines })) }));
+  return serializePlan(plan.header, sections, plan.tail);
 }
 
 /** A chord symbol as pitches for the music box: a bass note and a close voicing above it. */

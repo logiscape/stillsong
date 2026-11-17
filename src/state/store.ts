@@ -15,6 +15,8 @@ import { locateBars, pitchContent, type BarGrid } from '@engine/domain/barGrid';
 import type { SongMap } from '@engine/domain/songMap';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
+import { beyondStopping, type MapEditState } from './mapEdit';
+import { melodyEditTake } from './remix';
 import { routeForBoot } from './route';
 
 export type Screen = 'setup' | 'update' | 'create' | 'sanctuary' | 'song' | 'map' | 'remix' | 'about' | 'draw';
@@ -56,6 +58,10 @@ export interface AppState {
   selectedSongId: string | null;
   /** Autoplay when the Song view was entered from a finished creation. */
   autoplayOnOpen: boolean;
+  /** A melody edit asked for from the Song map, while it is sung or after it failed. The map shows it; the Create screen does not. */
+  mapEdit: MapEditState | null;
+  /** The version a melody edit just made: its map opens at the bars that were sung again, once. */
+  mapArrival: string | null;
   lastError: string | null;
 }
 
@@ -75,6 +81,8 @@ let state: AppState = {
   llmOnline: null,
   selectedSongId: null,
   autoplayOnOpen: false,
+  mapEdit: null,
+  mapArrival: null,
   lastError: null,
 };
 
@@ -84,6 +92,11 @@ const listeners = new Set<() => void>();
 function setState(patch: Partial<AppState>): void {
   state = { ...state, ...patch };
   for (const l of listeners) l();
+}
+
+/** The state as it is now, for code that is not a React component. */
+export function appState(): AppState {
+  return state;
 }
 
 export function getEngine(): Engine {
@@ -271,13 +284,25 @@ export async function bootstrap(created: Engine): Promise<void> {
         });
         break;
       case 'progress':
-        if (state.creation) {
+        if (state.mapEdit && e.progress.songId === state.mapEdit.songId) {
+          setState({ mapEdit: { ...state.mapEdit, progress: e.progress } });
+        } else if (state.creation && !stoppedEdits.has(e.progress.songId)) {
           setState({
             creation: { ...state.creation, stage: stageForProgress(e.progress), progress: e.progress },
           });
         }
         break;
       case 'song_done':
+        if (state.mapEdit && e.song.id === state.mapEdit.songId) {
+          void finishMapEdit(state.mapEdit, e.song.id);
+          break;
+        }
+        // Stopped too late to stop: the version is in the library, and that is all.
+        // Whoever stopped it is not taken to it, and it does not start playing.
+        if (stoppedEdits.delete(e.song.id)) {
+          void refreshLists();
+          break;
+        }
         // The drawing's job is done once the song exists; a failed render
         // keeps pendingPhoto (and the paint session with it) for the retry.
         clearPaintSession();
@@ -285,6 +310,17 @@ export async function bootstrap(created: Engine): Promise<void> {
         void refreshLists();
         break;
       case 'song_failed':
+        if (state.mapEdit && e.song.id === state.mapEdit.songId) {
+          // The map is still showing the notes that were moved: the reason goes there.
+          setState({ mapEdit: { ...state.mapEdit, progress: undefined, error: e.song.error ?? 'Something went wrong.' } });
+          void refreshLists();
+          break;
+        }
+        // It failed just as it was stopped: nobody is waiting for the reason.
+        if (stoppedEdits.delete(e.song.id)) {
+          void refreshLists();
+          break;
+        }
         // The failed row keeps its spec and parent, so the Create flow
         // can offer to send that exact render back to the studio.
         setState({ creation: null, creationError: e.song.error ?? 'Something went wrong.', failedSong: e.song, screen: 'create' });
@@ -402,6 +438,90 @@ export async function enqueueRemix(spec: SongSpec, parentId: string): Promise<vo
   } catch (err) {
     setState({ creation: null, creationError: err instanceof Error ? err.message : String(err) });
   }
+}
+
+// ---- melody edits from the Song map ----------------------------------------
+
+/**
+ * "Sing the new notes": queues a melody edit of `source` and stays on its
+ * map. The map shows the studio at work; when the new version is done the map
+ * turns to it, at the bars that were sung again.
+ */
+export async function singNewNotes(source: Song, editedAbc: string): Promise<void> {
+  if (state.mapEdit && !state.mapEdit.error) return;
+  const asked: MapEditState = { sourceId: source.id, songId: '', taken: false, abc: editedAbc, since: Date.now() };
+  setState({ mapEdit: asked });
+  try {
+    const queued = await getEngine().enqueueSong(melodyEditTake(source, editedAbc), source.id);
+    // Put away while the studio was still taking it: it must not go ahead, and must not come back on screen.
+    if (state.mapEdit !== asked) return void (await cancelSong(queued.id));
+    setState({ mapEdit: { ...asked, songId: queued.id, taken: true } });
+  } catch (err) {
+    if (state.mapEdit === asked) setState({ mapEdit: { ...asked, error: err instanceof Error ? err.message : String(err) } });
+  }
+}
+
+/**
+ * Map edits that were stopped, until the studio says how they ended. A stop
+ * can come too late (the recording is already being copied into the library)
+ * or cross a failure: the song's last event then arrives after the map has
+ * put the edit away, and must not be taken for a creation's, which would open
+ * the Song view and play it, or show the failure on the Create screen. An
+ * edit that is cancelled as asked says nothing more, and its id just stays.
+ */
+const stoppedEdits = new Set<string>();
+
+/** Cancels whatever job is singing or waiting to sing a song. */
+async function cancelSong(songId: string): Promise<void> {
+  stoppedEdits.add(songId);
+  await refreshLists();
+  for (const job of [...state.activeJobs, ...state.queuedJobs]) if (job.songId === songId) await getEngine().cancelJob(job.id);
+  await refreshLists();
+}
+
+/** The new version exists. Someone still on the map of the song they edited is shown it there; otherwise it is simply in the library. */
+async function finishMapEdit(edit: MapEditState, songId: string): Promise<void> {
+  // The list first: the map needs the finished row (its recording, its plan) before it turns to it.
+  await refreshLists();
+  const stillThere = state.screen === 'map' && state.selectedSongId === edit.sourceId;
+  setState({ mapEdit: null, ...(stillThere ? { selectedSongId: songId, mapArrival: songId } : {}) });
+}
+
+/** The same edit again after it failed: the studio sings other takes (see Engine.runMelodyEdit). */
+export async function retryMapEdit(): Promise<void> {
+  const edit = state.mapEdit;
+  if (!edit?.error) return;
+  if (!edit.songId) return setState({ mapEdit: null }); // it never reached the studio: asking again is "Sing the new notes"
+  // The song is known already, but there is no job to stop until the studio has taken it again.
+  const again: MapEditState = { sourceId: edit.sourceId, songId: edit.songId, taken: false, abc: edit.abc, since: Date.now() };
+  const current = () => state.mapEdit?.songId === again.songId && state.mapEdit.since === again.since;
+  stoppedEdits.delete(again.songId);
+  setState({ mapEdit: again });
+  try {
+    await getEngine().retrySong(again.songId);
+    // Put away while the studio was still taking it: as in singNewNotes, it must not go ahead untracked.
+    if (!current()) return void (await cancelSong(again.songId));
+    setState({ mapEdit: { ...state.mapEdit!, taken: true } });
+  } catch (err) {
+    if (current()) setState({ mapEdit: { ...edit, error: err instanceof Error ? err.message : String(err) } });
+  }
+}
+
+/** Stops an edit that is being sung, or puts away one that failed. The notes that were moved stay on the map. */
+export async function dropMapEdit(): Promise<void> {
+  const edit = state.mapEdit;
+  if (!edit) return;
+  // Too late to stop: the version is being saved, and the map will turn to it as it would have.
+  if (!edit.error && beyondStopping(edit.progress)) return;
+  setState({ mapEdit: null });
+  // One the studio has not taken yet is cancelled by whoever asked for it (singNewNotes,
+  // retryMapEdit), as soon as there is something to cancel.
+  if (edit.error || !edit.taken) return;
+  await cancelSong(edit.songId);
+}
+
+export function clearMapArrival(): void {
+  if (state.mapArrival) setState({ mapArrival: null });
 }
 
 /**

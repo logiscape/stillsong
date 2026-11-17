@@ -8,6 +8,7 @@ import check from 'lucide-static/icons/check.svg?url';
 import chevronDown from 'lucide-static/icons/chevron-down.svg?url';
 import chevronLeft from 'lucide-static/icons/chevron-left.svg?url';
 import chevronRight from 'lucide-static/icons/chevron-right.svg?url';
+import chevronUp from 'lucide-static/icons/chevron-up.svg?url';
 import clock from 'lucide-static/icons/clock.svg?url';
 import dices from 'lucide-static/icons/dices.svg?url';
 import disc from 'lucide-static/icons/disc.svg?url';
@@ -57,6 +58,7 @@ export const ICONS: Record<string, string> = {
   'chevron-down': chevronDown,
   'chevron-left': chevronLeft,
   'chevron-right': chevronRight,
+  'chevron-up': chevronUp,
   circle,
   'circle-filled': circleFilled,
   clock,

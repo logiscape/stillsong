@@ -12,10 +12,12 @@ import { AUDIO_FRAMES_PER_SECOND, DURATION, defaultSpec, randomSeed } from './do
 import { validateSpec, type ValidationIssue } from './domain/validate';
 import { hardwareTier, type HardwareTier } from './domain/duration';
 import type { HardwareInfo, RuntimeInstallState } from './ports';
-import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, EDIT_PHASES, PLAN_OUT, SECONDS_OUT, type EditSource } from './comfy/graphBuilder';
+import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, buildTakesGraph, EDIT_PHASES, PLAN_OUT, SECONDS_OUT, TAKES_OUT, type EditSource } from './comfy/graphBuilder';
 import { TAKE_NODE, type ApiGraph } from './comfy/nodes';
 import { editWindows, mergeWindows, parseAlignSeries } from './domain/editWindows';
-import type { BarGrid } from './domain/barGrid';
+import { readBarGrid, type BarGrid } from './domain/barGrid';
+import { changedBars, chooseTake, melodyWindows, parseScoreSeries, scoreTake } from './domain/melodyEdit';
+import { buildSongMap } from './domain/songMap';
 import { ComfyClient, type HistoryEntry } from './comfy/client';
 import { ProgressTracker, type ProgressEvent } from './comfy/events';
 import { SongRepo, type ComposedLength } from './repo/songs';
@@ -47,6 +49,8 @@ export function takeRelPath(songId: string): string {
 
 /** Where an edit's source take is sent, under ComfyUI's temp folder (emptied at every ComfyUI start). */
 const TAKE_UPLOAD_FOLDER = 'stillsong2';
+/** Takes a melody edit sings before choosing one. Five gave a smooth take every time it was tried by ear; each costs about two seconds. */
+const MELODY_TAKES = 5;
 
 type ProgressFn = (phase: string, extra?: Partial<JobProgress>) => void;
 type PromptOutcome = { kind: 'success'; perform?: PerformProgress } | { kind: 'interrupted' } | { kind: 'error'; message: string };
@@ -71,6 +75,13 @@ export interface JobProgress {
  * `progress` events (NODE_PHASES) once the job pipeline takes over.
  */
 export type CreationStage = 'preparing' | 'looking' | 'writing' | 'studio' | 'composing' | 'rendering' | 'finishing';
+
+/**
+ * The phase reported while a finished recording is copied into the library.
+ * From here a cancel comes too late: the studio's work is over, and the song
+ * is saved (cancelJob has nothing left to interrupt).
+ */
+export const HARVEST_PHASE = 'Downloading song';
 
 export type EngineEvent =
   | { kind: 'queue_changed' }
@@ -461,7 +472,7 @@ export class Engine {
 
     await this.jobs.setState(job.id, 'harvesting');
     this.emit({ kind: 'queue_changed' });
-    progress('Downloading song');
+    progress(HARVEST_PHASE);
     await this.harvest(job, song, promptId, startedAt, outcome.perform);
     return 'done';
   }
@@ -524,8 +535,18 @@ export class Engine {
     if (!source?.takePath || !abc.trim() || !(await this.ports.files.exists(source.takePath))) {
       throw new Error('The original recording is no longer here to keep.');
     }
-    const take = await this.comfy.uploadTemp(takeRelPath(source.id), `${source.id.slice(0, 8)}.take.safetensors`, TAKE_UPLOAD_FOLDER);
+    // The plan itself was edited: a melody edit. Its windows come from the
+    // changed bars, not from where words are sung.
+    const melody = !!song.spec.abc?.trim() && song.spec.abc !== abc;
+    const bars = melody ? this.melodyBars(song, source, abc) : null;
+    // A name of its own for every edit. The studio keeps a take it has loaded
+    // open (the file is memory-mapped), and on Windows an open file cannot be
+    // written over: a second edit of one song, sent under the first one's
+    // name, was refused with a 500. The temp folder is emptied when the studio starts.
+    const uploadName = `${source.id.slice(0, 8)}_${newId().slice(0, 6)}.take.safetensors`;
+    const take = await this.comfy.uploadTemp(takeRelPath(source.id), uploadName, TAKE_UPLOAD_FOLDER);
     const from: EditSource = { take, abc };
+    if (bars) return this.runMelodyEdit(job, song, source, from, bars, startedAt, progress);
 
     const asked = await this.sungWindows(job, song, from, source.spec.lyrics, finding, progress);
     if (asked === 'cancelled') return 'cancelled';
@@ -569,13 +590,92 @@ export class Engine {
       if (leftover.length === 0) {
         await this.jobs.setState(job.id, 'harvesting');
         this.emit({ kind: 'queue_changed' });
-        progress('Downloading song');
+        progress(HARVEST_PHASE);
         await this.harvest(job, song, promptId, startedAt, outcome.perform, { source, windows });
         return 'done';
       }
       await discard();
       windows = mergeWindows(windows, leftover);
     }
+  }
+
+  /**
+   * The frame windows a melody edit sings again: from each changed bar to the
+   * start of the next phrase, by the source's bar grid. Throws, in plain
+   * words, when the edit is not one this can do.
+   */
+  private melodyBars(song: Song, source: Song, abc: string): FrameWindow[] {
+    if (song.spec.lyrics !== source.spec.lyrics) throw new Error('Change the notes or the words, one at a time.');
+    const before = buildSongMap(abc, source.spec.lyrics);
+    const after = buildSongMap(song.spec.abc!, source.spec.lyrics);
+    const changed = before && after ? changedBars(before, after) : null;
+    if (!before || !changed) throw new Error('Only the notes of the melody can be changed while the rest is kept.');
+    if (changed.length === 0) throw new Error('No note of the melody was changed.');
+    const grid = readBarGrid(source.barGrid, before.phrases.length);
+    if (!grid) throw new Error('The bars of this recording have not been found yet. Open its Song map first.');
+    const frames = Math.round((source.actualSec ?? 0) * AUDIO_FRAMES_PER_SECOND);
+    const windows = melodyWindows(before, grid, changed, frames);
+    if (windows.length === 0) throw new Error('The bars you changed are not in the recording.');
+    return windows;
+  }
+
+  /**
+   * A melody edit (spec.edit with an edited spec.abc): the changed bars are
+   * sung again under the new plan and everything else is kept.
+   *
+   *  1. Several takes of the windows are sung, tokens only, one per seed
+   *     (never the original's seed: it clings to the old tune), and each is
+   *     scored under the new plan and the old.
+   *  2. The take that follows the new notes best, among those that hand back
+   *     to the kept recording smoothly, is performed in full.
+   */
+  private async runMelodyEdit(
+    job: Job,
+    song: Song,
+    source: Song,
+    from: EditSource,
+    windows: FrameWindow[],
+    startedAt: number,
+    progress: ProgressFn,
+  ): Promise<'done' | 'cancelled'> {
+    const edited = song.spec.abc!;
+    const trying = EDIT_PHASES.trying;
+    progress(trying);
+    const first = Number(song.spec.seed);
+    const seeds = Array.from({ length: MELODY_TAKES }, (_, i) => first + i);
+    const { graph: takes } = buildTakesGraph(song.spec, from, edited, windows, seeds);
+    const tried = await this.runPrompt(job, takes, progress, { label: trying });
+    if (tried.outcome.kind === 'interrupted') return 'cancelled';
+    if (tried.outcome.kind === 'error') throw new Error(tried.outcome.message);
+    const texts = (await this.comfy.history(tried.promptId))?.texts ?? {};
+    const base = parseScoreSeries(texts[TAKES_OUT.base]);
+    const scores = seeds.map((_, i) => {
+      const underEdited = parseScoreSeries(texts[TAKES_OUT.edited(i)]);
+      const underOriginal = parseScoreSeries(texts[TAKES_OUT.original(i)]);
+      if (!base || !underEdited || !underOriginal) throw new Error('The studio did not say how the new takes went.');
+      return scoreTake(windows, base, underEdited, underOriginal);
+    });
+    const pick = chooseTake(scores);
+    if (pick < 0) {
+      // A retry sends this same song back: it must not sing the same takes again.
+      await this.songs.setSpec(song.id, { ...song.spec, seed: String(first + MELODY_TAKES) });
+      throw new Error('The studio kept to the old notes. Try again for other takes.');
+    }
+
+    // The song is the take that was chosen: its seed is the one performed.
+    const spec = { ...song.spec, seed: String(seeds[pick]) };
+    await this.songs.setSpec(song.id, spec);
+    const chosen = { ...song, spec };
+    const prefix = `${renderFilePrefix(song.id)}_${newId().slice(0, 6)}`;
+    const { graph } = buildEditGraph(spec, { take: from.take, abc: edited }, windows, prefix);
+    const { promptId, outcome } = await this.runPrompt(job, graph, progress, { record: chosen });
+    if (outcome.kind === 'interrupted') return 'cancelled';
+    if (outcome.kind === 'error') throw new Error(outcome.message);
+    await this.jobs.setState(job.id, 'harvesting');
+    this.emit({ kind: 'queue_changed' });
+    progress(HARVEST_PHASE);
+    await this.harvest(job, chosen, promptId, startedAt, outcome.perform, { source, windows, planAbc: edited });
+    return 'done';
   }
 
   /**
@@ -605,8 +705,8 @@ export class Engine {
     promptId: string,
     startedAt: number | undefined,
     perform?: PerformProgress,
-    /** A "keep the rest" edit: what it kept from, and the windows it sang again. */
-    edit?: { source: Song; windows: FrameWindow[] },
+    /** A "keep the rest" edit: what it kept from, the windows it sang again, and the plan it performed when that is not the source's. */
+    edit?: { source: Song; windows: FrameWindow[]; planAbc?: string },
   ): Promise<void> {
     const hist = await this.comfy.history(promptId);
     const audio = hist?.files.find((f) => AUDIO_FILE.test(f.filename));
@@ -626,10 +726,12 @@ export class Engine {
       outputPath: outPath,
       renderMs: startedAt ? finishedAt - startedAt : undefined,
       composed,
-      planAbc: edit ? edit.source.planAbc : performedPlan(hist, song.spec),
+      planAbc: edit ? edit.planAbc ?? edit.source.planAbc : performedPlan(hist, song.spec),
       takePath,
       editWindows: edit?.windows,
     });
+    // An edit keeps its source's length and bars, so the bars sit where they did.
+    if (edit?.source.barGrid) await this.songs.setBarGrid(song.id, edit.source.barGrid);
     // The library now holds the only copies that matter. ComfyUI's originals
     // would otherwise accumulate forever (and outlive "delete song" — the
     // mp3's ID3 tag carries the full prompt).

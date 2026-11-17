@@ -217,3 +217,46 @@ export const stillsong2Align = (p: {
   class_type: 'Stillsong2Align',
   inputs: { clip: p.clip, style: p.style, abc: p.abc, mode: p.mode, tokens: p.tokens, lyrics_a: p.lyricsA, lyrics_b: p.lyricsB },
 });
+
+/**
+ * The quick part of performing a take again: sings the `redo` windows and
+ * returns the tokens only (about a second for a few bars), so several seeds
+ * can be tried before one is performed in full. Output: 0 tokens.
+ */
+export const stillsong2Resing = (p: {
+  clip: Link;
+  style: string;
+  lyrics: string;
+  abc: string;
+  seed: number;
+  mode: 'full' | 'melody';
+  maxDuration: number;
+  tokens: Link;
+  redo: string;
+}): ApiNode => ({
+  class_type: 'Stillsong2Resing',
+  inputs: {
+    clip: p.clip,
+    style: p.style,
+    lyrics: p.lyrics,
+    abc: p.abc,
+    seed: p.seed,
+    mode: p.mode,
+    max_duration: p.maxDuration,
+    temperature: 1.0,
+    top_p: 0.95,
+    top_k: 100,
+    repetition_penalty: 1.2,
+    tokens: p.tokens,
+    redo: p.redo,
+  },
+});
+
+/**
+ * How likely is each frame of a take under a sheet and a plan? Its /history
+ * `text` is JSON `{ frames, logp: number[] }` (see domain/melodyEdit.ts).
+ */
+export const stillsong2Score = (p: { clip: Link; style: string; lyrics: string; abc: string; mode: 'full' | 'melody'; tokens: Link }): ApiNode => ({
+  class_type: 'Stillsong2Score',
+  inputs: { clip: p.clip, style: p.style, lyrics: p.lyrics, abc: p.abc, mode: p.mode, tokens: p.tokens },
+});

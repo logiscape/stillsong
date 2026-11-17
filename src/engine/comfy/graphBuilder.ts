@@ -36,6 +36,8 @@ export const EDIT_PHASES = {
   finding: 'Composing (finding your lines)',
   checking: 'Saving (checking the new lines)',
   again: 'Saving (singing those lines once more)',
+  // A melody edit: several takes of the changed bars are sung and compared.
+  trying: 'Composing (trying the new notes)',
 } as const;
 
 /** History output ids the harvest reads (PreviewAny text). */
@@ -43,6 +45,16 @@ export const PLAN_OUT = 'plan_out';
 export const SECONDS_OUT = 'seconds_out';
 /** The alignment node: its history text is the series (JSON). */
 export const ALIGN_OUT = 'align';
+/**
+ * The scoring nodes of a takes prompt (buildTakesGraph), whose history texts
+ * are series: the source take under its own plan, and each new take under the
+ * edited plan and under the original one.
+ */
+export const TAKES_OUT = {
+  base: 'score_base',
+  edited: (take: number) => `score_new_${take}`,
+  original: (take: number) => `score_old_${take}`,
+};
 
 export interface GraphOptions {
   /**
@@ -176,5 +188,35 @@ export function buildEditGraph(spec: SongSpec, source: EditSource, windows: Fram
   graph.take = N.stillsong2SaveTake(['restore', 0], ['perform', 2], filenamePrefix);
   graph.decode = N.vaeDecodeAudio(['restore', 0], ['ckpt', 2]);
   graph.save = N.saveAudioMp3(['decode', 0], filenamePrefix, spec.quality);
+  return { graph };
+}
+
+/**
+ * Several takes of a melody edit, as tokens only: the source take's `windows`
+ * sung under the edited plan once per seed, and everything the engine needs to
+ * tell the takes apart (see domain/melodyEdit.ts). No audio is made. The take
+ * chosen is then performed by buildEditGraph with the edited plan and that
+ * seed, which sings the same tokens.
+ */
+export function buildTakesGraph(spec: SongSpec, source: EditSource, editedAbc: string, windows: FrameWindow[], seeds: number[]): { graph: ApiGraph } {
+  const mode = spec.planMode === 'melody' ? 'melody' : 'full';
+  const prompt = { clip: ['ckpt', 1] as N.Link, style: spec.caption, lyrics: spec.lyrics, mode } as const;
+  const graph: ApiGraph = {
+    ckpt: N.checkpointLoader(spec.checkpoint),
+    source: N.stillsong2LoadTake(source.take),
+    [TAKES_OUT.base]: N.stillsong2Score({ ...prompt, abc: source.abc, tokens: ['source', 0] }),
+  };
+  seeds.forEach((seed, i) => {
+    graph[`sing_${i}`] = N.stillsong2Resing({
+      ...prompt,
+      abc: editedAbc,
+      seed,
+      maxDuration: snapDuration(spec.durationSec),
+      tokens: ['source', 0],
+      redo: N.frameRanges(windows),
+    });
+    graph[TAKES_OUT.edited(i)] = N.stillsong2Score({ ...prompt, abc: editedAbc, tokens: [`sing_${i}`, 0] });
+    graph[TAKES_OUT.original(i)] = N.stillsong2Score({ ...prompt, abc: source.abc, tokens: [`sing_${i}`, 0] });
+  });
   return { graph };
 }

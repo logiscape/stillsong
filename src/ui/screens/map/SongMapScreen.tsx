@@ -7,13 +7,21 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Song } from '@engine/domain/types';
 import { gridTiming, readBarGrid } from '@engine/domain/barGrid';
+import { changedBars, melodyWindows } from '@engine/domain/melodyEdit';
+import { stepNote, type NoteRef } from '@engine/domain/melodyPlan';
 import { buildSongMap, evenTiming, musicBoxEvents, phraseAt, recordingTiming, type SongMap } from '@engine/domain/songMap';
-import { locateSongBars, navigate, pausePlayback, playSongFrom, playbackTime, seek, thumbSrc, useAppState } from '@state/store';
+import { mapEditStage, stopReady, STOP_GUARD_MS } from '@state/mapEdit';
+import { canKeepRest } from '@state/remix';
+import {
+  clearMapArrival, dropMapEdit, locateSongBars, navigate, pausePlayback, playSongFrom, playbackTime, retryMapEdit, seek, singNewNotes,
+  thumbSrc, useAppState,
+} from '@state/store';
 import { Button } from '@ui/ds/Button';
 import { Icon } from '@ui/ds/Icon';
 import { IconButton } from '@ui/ds/IconButton';
 import { Notice } from '@ui/ds/Notice';
 import { Panel } from '@ui/ds/Panel';
+import { ProgressBar } from '@ui/ds/ProgressBar';
 import { fmtDuration } from '@ui/ds/format';
 import { PhrasePanel } from './PhrasePanel';
 import { Ribbon } from './Ribbon';
@@ -21,6 +29,8 @@ import { boxElapsed, boxStart, boxStop } from './musicBox';
 import { BAND, SINGER, STONE, pct, wallOf } from './palette';
 
 type Source = 'recording' | 'box';
+/** A version just sung from this map opens with its playhead this long before its new bars, so that Play leads into them. */
+const ARRIVAL_LEAD_SEC = 4;
 
 function SourceChoice({ value, onChange, recording }: { value: Source; onChange: (v: Source) => void; recording: boolean }): React.ReactElement {
   const options: { value: Source; label: string; icon: string; disabled?: boolean }[] = [
@@ -74,8 +84,16 @@ function Legend(): React.ReactElement {
   );
 }
 
-function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElement {
+function MapView({ song, map: original }: { song: Song; map: SongMap }): React.ReactElement {
   const s = useAppState();
+  // Notes the person has moved and not yet had sung: each move is a new draft
+  // of the plan, the last one is on show, and undo drops it. The map below is
+  // the draft's; `original` is the song as recorded.
+  // Someone who asked for their notes to be sung and left the map finds them here on the way back.
+  const [drafts, setDrafts] = useState<string[]>(() => (s.mapEdit?.sourceId === song.id && s.mapEdit.abc !== song.planAbc ? [s.mapEdit.abc] : []));
+  const draft = drafts.length ? drafts[drafts.length - 1] : null;
+  const map = useMemo(() => (draft ? buildSongMap(draft, song.spec.lyrics) ?? original : original), [draft, original, song.spec.lyrics]);
+  const [picked, setPicked] = useState<NoteRef | null>(null);
   const loaded = s.playback?.songId === song.id;
   const recordingPlaying = loaded && s.playback!.isPlaying;
   const volume = s.playback?.volume ?? 0.8;
@@ -188,6 +206,8 @@ function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElemen
     const at = bar >= timings[from].lastBar - 0.01 ? 0 : bar;
     pos.current = at;
     if (from === 'recording') {
+      // A phrase being played back after a note was moved would sound over the recording.
+      boxStop();
       playSongFrom(song, timings.recording.secAt(at));
     } else {
       // The shared player may be playing another song (an audition started
@@ -239,6 +259,90 @@ function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElemen
     resume.current = false;
   };
 
+  // ---- moving notes
+  const changed = useMemo(() => (draft ? changedBars(original, map) ?? [] : []), [draft, original, map]);
+  const frames = Math.round(recordingTotal * 25);
+  const windows = useMemo(() => (grid && changed.length ? melodyWindows(original, grid, changed, frames) : []), [grid, changed, original, frames]);
+  const editedPhrases = useMemo(() => new Set(changed.map((bar) => phraseAt(original, bar))), [changed, original]);
+  // A song's notes can be moved once the rest of its recording can be kept (it
+  // has a take) and its bars have been found in the recording.
+  const editable = canKeepRest(song) && !!grid;
+  const editNote = !canKeepRest(song)
+    ? 'This recording cannot be kept in part, so its notes cannot be changed here.'
+    : !grid && !locating ? 'The map could not be lined up with this recording, so its notes cannot be changed here.' : undefined;
+  const plan = draft ?? song.planAbc ?? '';
+  const pickedHere = picked && picked.phrase === now ? picked.note : null;
+  const pick = (note: number | null) => {
+    if (note === null) return setPicked(null);
+    if (playing) pause();
+    setPicked({ phrase: now, voice: 'vocal', note });
+    // Hear the note that was picked.
+    const n = map.phrases[now].phrase.vocal[note];
+    if (n) {
+      pausePlayback();
+      boxStart([{ kind: 'singer', t: 0, d: 0.45, midi: n.midi }], volume);
+    }
+  };
+  const step = (steps: number) => {
+    if (!picked) return;
+    const next = stepNote(plan, picked, steps);
+    if (!next) return;
+    // A request that failed was for the notes as they were then. "Try again"
+    // would sing those: with the notes moved on, it is "Sing the new notes" again.
+    if (asked?.error) void dropMapEdit();
+    setDrafts(next === song.planAbc ? [] : [...drafts, next]);
+    // Hear the phrase with the note where it is now.
+    const moved = buildSongMap(next, song.spec.lyrics);
+    const it = moved?.phrases[picked.phrase];
+    if (moved && it) {
+      if (playing) pause();
+      pausePlayback();
+      boxStart(musicBoxEvents(moved, it.start, it.start + it.phrase.bars), volume);
+    }
+  };
+  // Singing happens here, on the map: the studio's progress shows in the bar
+  // below, and when the new version is done the map turns to it.
+  const asked = s.mapEdit?.sourceId === song.id ? s.mapEdit : null;
+  const singing = !!asked && !asked.error;
+  const busy = !!s.mapEdit && !s.mapEdit.error; // one edit at a time, whichever song it is for
+  const stage = mapEditStage(asked?.progress);
+  // Stop sits where "Sing the new notes" was: it waits out a double-click, and for the studio to have taken the
+  // request. Once the new version is being copied into the library there is nothing left to stop.
+  const [stopArmed, setStopArmed] = useState(false);
+  useEffect(() => {
+    if (!singing || !asked) return setStopArmed(false);
+    const arm = () => setStopArmed(stopReady(asked, Date.now()));
+    arm();
+    const timer = window.setTimeout(arm, Math.max(0, STOP_GUARD_MS - (Date.now() - asked.since)) + 20);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singing, asked?.since, asked?.taken, asked?.progress?.phase]);
+  const sing = () => {
+    if (!draft || !windows.length || busy) return;
+    void singNewNotes(song, draft);
+  };
+
+  // Arriving at a version this map just had sung: the playhead waits a few
+  // seconds before the bars that are new. Nothing plays until the person
+  // presses Play (they asked for that, having tried it playing by itself).
+  const resung = useMemo(
+    () => (song.editWindows ?? []).map(([a, b]) => [timings.recording.barAt(a / 25), timings.recording.barAt(b / 25)] as const),
+    [song.editWindows, timings],
+  );
+  useEffect(() => {
+    if (s.mapArrival !== song.id) return;
+    clearMapArrival();
+    const first = song.editWindows?.[0];
+    if (!first) return;
+    // The player may still be on the version this one was made from: a recording playing on under a map of another would be heard as this one.
+    pausePlayback();
+    pos.current = Math.max(0, timings.recording.barAt(Math.max(0, first[0] / 25 - ARRIVAL_LEAD_SEC)));
+    paint();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const span = (list: readonly (readonly [number, number])[]) =>
+    list.map(([a, b]) => `${fmtDuration(a / 25)} to ${fmtDuration(b / 25)}`).join(' and ');
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     const bar = pos.current ?? 0;
     const i = phraseAt(map, bar);
@@ -273,10 +377,62 @@ function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElemen
       </div>
 
       <Panel pad="18px 18px 16px">
-        <Ribbon map={map} timing={timing} now={now} headRef={headRef} onScrub={scrub} onKeyDown={onKeyDown} />
+        <Ribbon map={map} timing={timing} now={now} edited={editedPhrases} resung={resung} headRef={headRef} onScrub={scrub} onKeyDown={onKeyDown} />
       </Panel>
 
-      <PhrasePanel map={map} timing={timing} now={now} cursorRef={cursorRef} onJump={jump} />
+      <PhrasePanel
+        map={map} timing={timing} now={now} cursorRef={cursorRef} onJump={jump} editNote={editNote}
+        edit={editable ? {
+          original: original.phrases[now],
+          locked: singing,
+          picked: singing ? null : pickedHere,
+          onPick: pick,
+          onStep: step,
+          canRaise: !!picked && stepNote(plan, picked, 1) !== null,
+          canLower: !!picked && stepNote(plan, picked, -1) !== null,
+        } : undefined}
+      />
+
+      {(changed.length > 0 || asked) && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px 20px',
+          padding: '14px 18px', borderRadius: 'var(--radius-md)', background: 'var(--brass-wash)', border: '1px solid var(--brass-line)',
+        }}>
+          {singing ? (
+            <>
+              <div style={{ flex: '1 1 320px', minWidth: 0, maxWidth: '62ch' }}>
+                <ProgressBar label={stage.label} value={stage.fraction} indeterminate={stage.fraction === undefined} />
+                <div style={{ font: 'var(--ui-sm)', color: 'var(--text-body)', marginTop: 10 }}>
+                  The map will turn to the new version when it is ready, at the bars that were sung again.
+                </div>
+              </div>
+              <Button variant="ghost" disabled={!stopArmed} onClick={() => void dropMapEdit()}>Stop</Button>
+            </>
+          ) : (
+            <>
+              <div style={{ minWidth: 0, maxWidth: '62ch' }}>
+                <div style={{ font: '500 14.5px/1.4 var(--font-ui)', color: 'var(--ink-1)' }}>
+                  {asked?.error ? 'The new notes were not sung' : changed.length === 1 ? 'One bar has new notes' : `${changed.length} bars have new notes`}
+                </div>
+                <div style={{ font: 'var(--ui-sm)', color: 'var(--text-body)', marginTop: 4 }}>
+                  {asked?.error
+                    ? `${asked.error} Your notes are still here.`
+                    : windows.length
+                      ? `Only ${span(windows)} of the recording is sung again, as a new version. Everything else stays exactly as it is. The studio tries a few takes and keeps the one that follows your notes best.`
+                      : 'Those bars are not in the recording, so there is nothing to sing again.'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                <Button variant="ghost" icon="undo-2" onClick={() => { if (asked) void dropMapEdit(); setDrafts(drafts.slice(0, -1)); }}>Undo</Button>
+                <Button variant="ghost" onClick={() => { if (asked) void dropMapEdit(); setDrafts([]); setPicked(null); }}>Start over</Button>
+                {asked?.error && asked.songId
+                  ? <Button variant="primary" icon="mic" onClick={() => void retryMapEdit()}>Try again</Button>
+                  : <Button variant="primary" icon="mic" disabled={!windows.length || busy} onClick={sing}>Sing the new notes</Button>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <p style={{ margin: 0, font: 'var(--ui-sm)', color: 'var(--ink-3)', maxWidth: '72ch' }}>
         {source === 'recording' && cutShort && `This recording stops at ${fmtDuration(timing.total)}, before the end of its melody plan. The dimmed part was never performed; the music box still plays it. `}

@@ -1,28 +1,63 @@
 // The phrase under the playhead, close up: its notes bar by bar, the chords
 // beneath, the words sung over it, and where else in the song its pattern
-// is heard.
+// is heard. Where the song allows it, the singer's notes can be picked here
+// and moved up or down.
 
 import React, { useState } from 'react';
 import type { MapPhrase, MapTiming, SongMap } from '@engine/domain/songMap';
+import { Button } from '@ui/ds/Button';
 import { fmtDuration } from '@ui/ds/format';
 import { Panel } from '@ui/ds/Panel';
 import { BAND, SINGER, letterOf, pct, wallOf } from './palette';
 
 const NOTE_H = 1.5; // semitones
 
-function Roll({ map, it }: { map: SongMap; it: MapPhrase }): React.ReactElement {
+/** Moving the singer's notes in the phrase on show. */
+export interface PhraseEdit {
+  /** The phrase as it was before any note moved, for showing where a moved note came from. */
+  original: MapPhrase;
+  /** The sung note that is picked (its place among the phrase's sung notes), or null. */
+  picked: number | null;
+  onPick: (note: number | null) => void;
+  onStep: (steps: number) => void;
+  canRaise: boolean;
+  canLower: boolean;
+  /** The studio is singing these notes: they show as moved, and stay where they are. */
+  locked: boolean;
+}
+
+function Roll({ map, it, edit }: { map: SongMap; it: MapPhrase; edit?: PhraseEdit }): React.ReactElement {
   const units = map.ctx.barUnits;
   const top = map.hi + 1;
   const height = top - (map.lo - 1) + 1;
   const gap = units * 0.03;
-  const notes = (voice: 'vocal' | 'ins') => it.phrase[voice].map((n, i) => (
-    <rect key={i} x={n.pos} y={top - n.midi + 0.5 - NOTE_H / 2} width={Math.max(n.dur - gap, units * 0.05)} height={NOTE_H} />
-  ));
+  const y = (midi: number) => top - midi + 0.5 - NOTE_H / 2;
+  const width = (dur: number) => Math.max(dur - gap, units * 0.05);
+  const was = (i: number) => edit?.original.phrase.vocal[i];
   return (
     <svg viewBox={`0 0 ${it.phrase.bars * units} ${height}`} preserveAspectRatio="none" aria-hidden
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-      <g style={{ fill: BAND }}>{notes('ins')}</g>
-      <g style={{ fill: SINGER }}>{notes('vocal')}</g>
+      <g style={{ fill: BAND }}>
+        {it.phrase.ins.map((n, i) => <rect key={i} x={n.pos} y={y(n.midi)} width={width(n.dur)} height={NOTE_H} />)}
+      </g>
+      {/* Where a moved note used to be. */}
+      {it.phrase.vocal.map((n, i) => was(i) && was(i)!.midi !== n.midi && (
+        <rect key={`was${i}`} x={n.pos} y={y(was(i)!.midi)} width={width(n.dur)} height={NOTE_H} vectorEffect="non-scaling-stroke"
+          style={{ fill: 'none', stroke: SINGER, strokeWidth: 1, strokeDasharray: '3 3', opacity: 0.5 }} />
+      ))}
+      {it.phrase.vocal.map((n, i) => {
+        const moved = !!was(i) && was(i)!.midi !== n.midi;
+        const picked = edit?.picked === i;
+        return (
+          <rect key={i} x={n.pos} y={y(n.midi)} width={width(n.dur)} height={NOTE_H} vectorEffect="non-scaling-stroke"
+            style={{ fill: picked ? 'var(--ink-1)' : moved ? 'var(--brass)' : SINGER, stroke: picked ? 'var(--brass)' : 'none', strokeWidth: 2 }} />
+        );
+      })}
+      {/* A taller, unseen target over each sung note: the notes themselves are a few pixels high. */}
+      {edit && !edit.locked && it.phrase.vocal.map((n, i) => (
+        <rect key={`hit${i}`} x={n.pos} y={y(n.midi) - NOTE_H} width={width(n.dur)} height={NOTE_H * 3}
+          onClick={() => edit.onPick(edit.picked === i ? null : i)} style={{ fill: 'transparent', cursor: 'pointer' }} />
+      ))}
     </svg>
   );
 }
@@ -55,11 +90,16 @@ export interface PhrasePanelProps {
   /** The line that runs across the phrase as it plays; the screen moves it. */
   cursorRef: React.RefObject<HTMLDivElement>;
   onJump: (bar: number) => void;
+  /** Present when this song's sung notes can be moved. */
+  edit?: PhraseEdit;
+  /** Why they cannot, when that is worth saying. */
+  editNote?: string;
 }
 
-export function PhrasePanel({ map, timing, now, cursorRef, onJump }: PhrasePanelProps): React.ReactElement {
+export function PhrasePanel({ map, timing, now, cursorRef, onJump, edit, editNote }: PhrasePanelProps): React.ReactElement {
   const it = map.phrases[now];
   const p = it.phrase;
+  const pickable = !!edit && !edit.locked && p.vocal.length > 0;
   const section = map.sections[it.section];
   // Four bars fill the width (most phrases are four); a longer phrase sets the scale for the song.
   const widest = map.phrases.reduce((n, x) => Math.max(n, x.phrase.bars), 4);
@@ -76,8 +116,23 @@ export function PhrasePanel({ map, timing, now, cursorRef, onJump }: PhrasePanel
         <span style={{ font: 'var(--ui-eyebrow)', letterSpacing: 'var(--tracking-eyebrow)', textTransform: 'uppercase', color: 'var(--brass-300)' }}>
           {section.name} · phrase {it.index + 1} of {it.count}
         </span>
-        <div style={{ position: 'relative', width, height: 150, background: 'var(--surface-inset)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-          <Roll map={map} it={it} />
+        <div
+          tabIndex={pickable ? 0 : undefined}
+          role={pickable ? 'group' : undefined}
+          aria-label={pickable ? 'The notes of this phrase. Left and right pick one of the singer’s notes; up and down move it.' : undefined}
+          onKeyDown={pickable && edit ? (e) => {
+            const at = edit.picked;
+            if (e.key === 'ArrowRight') edit.onPick(at === null ? 0 : Math.min(p.vocal.length - 1, at + 1));
+            else if (e.key === 'ArrowLeft') edit.onPick(at === null ? p.vocal.length - 1 : Math.max(0, at - 1));
+            else if (e.key === 'ArrowUp' && at !== null) edit.onStep(1);
+            else if (e.key === 'ArrowDown' && at !== null) edit.onStep(-1);
+            else if (e.key === 'Escape' && at !== null) edit.onPick(null);
+            else return;
+            e.preventDefault();
+          } : undefined}
+          style={{ position: 'relative', width, height: 150, background: 'var(--surface-inset)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}
+        >
+          <Roll map={map} it={it} edit={edit} />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none' }}>
             {bars.map((b) => <i key={b} style={{ flex: 1, borderLeft: b ? '1px solid var(--line-1)' : 'none' }} />)}
           </div>
@@ -93,6 +148,18 @@ export function PhrasePanel({ map, timing, now, cursorRef, onJump }: PhrasePanel
             </span>
           ))}
         </div>
+        {edit && p.vocal.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 10px', marginTop: 4 }}>
+            <Button variant="secondary" size="sm" icon="chevron-up" disabled={edit.locked || edit.picked === null || !edit.canRaise} onClick={() => edit.onStep(1)}>Higher</Button>
+            <Button variant="secondary" size="sm" icon="chevron-down" disabled={edit.locked || edit.picked === null || !edit.canLower} onClick={() => edit.onStep(-1)}>Lower</Button>
+            <span style={{ font: 'var(--ui-sm)', color: 'var(--ink-3)' }}>
+              {edit.locked
+                ? 'The studio is singing your notes. They can be moved again when it is done.'
+                : edit.picked === null ? 'Pick one of the singer’s notes to move it.' : 'Each press moves it one step of the key. Notes tied together move together.'}
+            </span>
+          </div>
+        )}
+        {!edit && editNote && p.vocal.length > 0 && <span style={{ font: 'var(--ui-sm)', color: 'var(--ink-3)', marginTop: 4 }}>{editNote}</span>}
       </div>
 
       <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>

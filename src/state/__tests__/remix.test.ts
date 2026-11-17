@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSpec, type Song, type SongSpec } from '@engine/domain/types';
-import { canKeepMelody, canKeepRest, keepRestTake, keepsRestByDefault, offersKeepRest, offersMelodyChoice, remixNeedsNewSeed, remixTake, reshapesLyrics } from '../remix';
+import { canKeepMelody, canKeepRest, keepRestTake, keepsRestByDefault, melodyEditTake, offersKeepRest, offersMelodyChoice, remixNeedsNewSeed, remixTake, reshapesLyrics } from '../remix';
 
 const PLAN = 'X:1\nV: Vocal\n% verse\n|: C D E F :|';
 
@@ -124,5 +124,19 @@ describe('keep the rest', () => {
     const again = reworded.replace('One spark in the black', 'One spark in the dark');
     expect(offersKeepRest(edited, draft(edited, { lyrics: again }))).toBe(true);
     expect(keepRestTake(edited, draft(edited, { lyrics: again })).edit).toEqual({ sourceId: 'v2' });
+  });
+});
+
+describe('a melody edit', () => {
+  it('performs the edited plan from the original, with a seed of its own', () => {
+    const o = song({ id: 'orig', takePath: 'x' });
+    const spec = melodyEditTake(o, 'the edited plan', () => '555');
+    expect(spec).toMatchObject({ abc: 'the edited plan', seed: '555', edit: { sourceId: 'orig' }, lyrics: o.spec.lyrics, caption: o.spec.caption });
+    expect(spec.seed).not.toBe(o.spec.seed);
+  });
+
+  it('is made from a version that was itself an edit, and names that version as its source', () => {
+    const v2 = song({ id: 'v2', takePath: 'y', parentId: 'orig' }, { edit: { sourceId: 'orig' } });
+    expect(melodyEditTake(v2, 'plan', () => '9').edit).toEqual({ sourceId: 'v2' });
   });
 });

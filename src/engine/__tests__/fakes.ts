@@ -59,6 +59,13 @@ export interface FakeWorld {
    * repeats): the per-frame drop series. Default: one clear dip.
    */
   alignSeries: number[][];
+  /**
+   * How each take of a melody edit scores, by take (the last one repeats):
+   * how much better it fits the edited plan in its windows, and how the kept
+   * second after them fares. The takes prompt's score series are built to sum
+   * to these. Default: every take follows the new notes and hands back well.
+   */
+  takeScores: { fit: number; seam: number }[];
 }
 
 /** A flat series of `frames` values with a -2 dip over [from, to). */
@@ -80,6 +87,7 @@ export function fakeHttp(): FakeWorld {
     takeNodes: false,
     submittedGraphs: [],
     alignSeries: [dipSeries(1060, 500, 550)],
+    takeScores: [{ fit: 50, seam: -40 }],
     http: null!,
   };
   let alignCalls = 0;
@@ -111,6 +119,29 @@ export function fakeHttp(): FakeWorld {
         if (graph?.align) {
           // An alignment prompt makes no audio: only the series.
           outputs.align = { text: [alignText.get(id) ?? ''] };
+        } else if (graph?.score_base) {
+          // A takes prompt makes no audio either: one series per scoring node.
+          const frames = 1060;
+          const series = (fill: (logp: number[]) => void) => {
+            const logp = new Array<number>(frames).fill(0);
+            fill(logp);
+            return { text: [JSON.stringify({ frames, logp })] };
+          };
+          for (const [node, { class_type, inputs }] of Object.entries(graph)) {
+            if (class_type !== 'Stillsong2Score') continue;
+            const take = /^score_new_(\d+)$/.exec(node);
+            if (!take) {
+              outputs[node] = series(() => {});
+              continue;
+            }
+            const sung = graph[(inputs.tokens as [string, number])[0]];
+            const [start, end] = String(sung.inputs.redo).split(',')[0].split('-').map(Number);
+            const score = w.takeScores[Math.min(Number(take[1]), w.takeScores.length - 1)];
+            outputs[node] = series((logp) => {
+              logp[start] = score.fit;
+              if (end < frames) logp[end] = score.seam;
+            });
+          }
         } else {
           outputs.save = { audio: [{ filename: 'x_00001_.mp3', subfolder: 'audio\\stillsong2', type: 'output' }] };
           outputs.seconds_out = { text: [w.secondsText] };
@@ -167,6 +198,8 @@ export function fakeFiles(): FileStore & {
   imported: { src: string; relPath: string }[];
   uploaded: { url: string; relPath: string; fileName: string; fields: Record<string, string> }[];
   uploadFails: boolean;
+  /** Called as each download starts: lets a test act while a song is being copied into the library. */
+  onDownload?: () => Promise<void> | void;
 } {
   const f = {
     downloaded: [] as string[],
@@ -188,8 +221,10 @@ export function fakeFiles(): FileStore & {
     async examplesDir() {
       return f.examplesRoot;
     },
+    onDownload: undefined as (() => Promise<void> | void) | undefined,
     async download(url: string, relPath: string) {
       f.downloaded.push(url);
+      await f.onDownload?.();
       return `C:\\lib\\${relPath}`;
     },
     async upload(url: string, relPath: string, fileName: string, fields: Record<string, string>) {

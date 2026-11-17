@@ -41,6 +41,10 @@ export interface RibbonProps {
   timing: MapTiming;
   /** The phrase under the playhead. */
   now: number;
+  /** Phrases with notes that were moved and not yet sung. */
+  edited?: ReadonlySet<number>;
+  /** In a version made by an edit: the stretches, in bars, that were sung again. */
+  resung?: readonly (readonly [number, number])[];
   /** The playhead: the screen moves it directly, many times a second. */
   headRef: React.RefObject<HTMLDivElement>;
   /** A press on the ribbon, a drag along it, and the release, as bar positions. */
@@ -48,7 +52,7 @@ export interface RibbonProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
 
-export function Ribbon({ map, timing, now, headRef, onScrub, onKeyDown }: RibbonProps): React.ReactElement {
+export function Ribbon({ map, timing, now, edited, resung, headRef, onScrub, onKeyDown }: RibbonProps): React.ReactElement {
   const dragging = useRef(false);
   const barOf = (e: React.PointerEvent<HTMLDivElement>): number => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -101,7 +105,8 @@ export function Ribbon({ map, timing, now, headRef, onScrub, onKeyDown }: Ribbon
           return (
             <div key={it.start} style={{
               width: pct(it.phrase.bars / map.bars), minWidth: 0, height: 24, overflow: 'hidden', textAlign: 'center',
-              background: quiet ? 'transparent' : wallOf(it.pattern), boxShadow: `inset 0 0 0 1px ${edge}`,
+              background: quiet ? 'transparent' : wallOf(it.pattern),
+              boxShadow: `inset 0 0 0 1px ${edge}${edited?.has(i) ? ', inset 0 -4px 0 var(--brass)' : ''}`,
               font: '500 10.5px/24px var(--font-mono)', color: 'var(--ink-1)',
             }}>{it.pattern >= 0 ? letterOf(it.pattern) : ''}</div>
           );
@@ -109,6 +114,12 @@ export function Ribbon({ map, timing, now, headRef, onScrub, onKeyDown }: Ribbon
       </div>
       <Lane map={map} voice="vocal" label="Singer" />
       <Lane map={map} voice="ins" label="Instrument" />
+      {resung?.map(([from, to]) => (
+        <div key={from} data-resung style={{
+          position: 'absolute', top: 0, bottom: 0, left: pct(from / map.bars), width: pct(Math.max(0, to - from) / map.bars), pointerEvents: 'none',
+          background: 'rgba(192,151,95,.13)', boxShadow: 'inset 1px 0 0 var(--brass-line), inset -1px 0 0 var(--brass-line)',
+        }} />
+      ))}
       {timing.lastBar < map.bars && (
         // The stretch of the plan a cut-short recording never performed.
         <div data-unperformed style={{

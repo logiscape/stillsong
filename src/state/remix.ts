@@ -98,6 +98,16 @@ export function keepRestTake(original: Song, spec: SongSpec): SongSpec {
 }
 
 /**
+ * The spec a melody edit performs: the original with an edited plan, the
+ * bars that changed sung again and everything else kept. The seed is new on
+ * purpose: with the original's, the studio clings to the old tune.
+ */
+export function melodyEditTake(original: Song, editedAbc: string, newSeed: () => string = randomSeed): SongSpec {
+  const { edit: _edit, ...spec } = original.spec;
+  return { ...spec, seed: newSeed(), abc: editedAbc, edit: { sourceId: original.id } };
+}
+
+/**
  * The seed and plan a remix performs. "Keep melody" re-performs the
  * original's plan (the same plan with a new seed, or with an edited lyric
  * line, keeps a recognizable melody — voices and instruments can shift; with

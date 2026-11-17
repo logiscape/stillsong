@@ -59,7 +59,9 @@ and your art always remains yours.
   versions so you can audition takes side by side.
 - **Song map.** See how a song is put together: its parts, the phrases that
   share a tune, and every note the singer and the instrument were given. Listen
-  to the recording, or to the melody plan on its own as a music box.
+  to the recording, or to the melody plan on its own as a music box. Pick one
+  of the singer's notes and move it: only the bars you changed are sung again,
+  as a new version, and the rest of the recording stays exactly as it was.
 - **Remix.** Edit the lyrics or caption and record a new version. The composer
   first writes a melody plan (a short score of notes and chords) and then
   performs it; a remix can keep that melody while you change the words, the
@@ -320,6 +322,18 @@ exactly as it was, at the same length. Adding or removing lines, or changing
 the caption or the melody, sings the whole song again. Songs made before this
 feature existed do not have what it needs saved, so they are remixed whole;
 the three example songs do.
+
+**Changing a few notes** Open a song's map (the map button in the Song view),
+pause on a phrase and pick one of the singer's notes. "Higher" and "Lower" move
+it one step of the key, and the music box plays the phrase back so you can hear
+the new tune before anything is sung. "Sing the new notes" then has the studio
+try a few takes of just those bars and keep the one that follows your notes
+best. You stay on the map while it works; when the new version is ready the
+map turns to it with the playhead just before the bars that were sung again:
+press Play to hear them, and carry on from there. Each round is kept as a version
+beside the original. The singer treats the notes as a guide, not a rule, so a
+small change may come out subtle. If the studio keeps to the old notes, try
+again for other takes.
 
 **If a song stops before its ending** Every song gets the same generous length
 limit. A song that runs out of room is marked in the Song view; a remix with a
