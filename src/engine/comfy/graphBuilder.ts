@@ -23,6 +23,7 @@ export const NODE_PHASES: Record<string, string> = {
   take: 'Saving',
   // "Keep the rest" edits (buildEditGraph).
   source: 'Composing (writing the song)',
+  arrange: 'Composing (writing the song)',
   hold: 'Composing (writing the song)',
   restore: 'Rendering audio',
 };
@@ -38,6 +39,9 @@ export const EDIT_PHASES = {
   again: 'Saving (singing those lines once more)',
   // A melody edit: several takes of the changed bars are sung and compared.
   trying: 'Composing (trying the new notes)',
+  // An extension: new bars are written for the plan, then several takes of them are sung.
+  writing: 'Composing (writing the new bars)',
+  extending: 'Composing (trying the new bars)',
 } as const;
 
 /** History output ids the harvest reads (PreviewAny text). */
@@ -55,6 +59,11 @@ export const TAKES_OUT = {
   edited: (take: number) => `score_new_${take}`,
   original: (take: number) => `score_old_${take}`,
 };
+
+/** The nodes of a writing prompt (buildWriteGraph), whose history texts are what each wrote. */
+export const WRITE_OUT = (attempt: number): string => `write_${attempt}`;
+/** Enough for three or four phrases: the first ones are the new bars, and the last may be cut off. */
+const WRITE_TOKENS = 240;
 
 export interface GraphOptions {
   /**
@@ -118,6 +127,20 @@ export interface EditSource {
   take: string;
   /** The plan the source performed (an edit never writes a new one). */
   abc: string;
+  /**
+   * An extension: the take is laid out anew before it is performed, with a gap
+   * of new frames (Stillsong2ArrangeTake). The windows then count frames of
+   * the longer take, and must cover the gap.
+   */
+  layout?: string;
+}
+
+/** The nodes that load an edit's take, and where its tokens and latent come from: the take itself, or the take laid out anew. */
+function sourceTake(source: EditSource): { nodes: ApiGraph; tokens: N.Link; latent: N.Link } {
+  const nodes: ApiGraph = { source: N.stillsong2LoadTake(source.take) };
+  if (!source.layout) return { nodes, tokens: ['source', 0], latent: ['source', 1] };
+  nodes.arrange = N.stillsong2ArrangeTake(['source', 0], ['source', 1], source.layout);
+  return { nodes, tokens: ['arrange', 0], latent: ['arrange', 1] };
 }
 
 /**
@@ -153,9 +176,10 @@ export function buildAlignGraph(spec: SongSpec, source: EditSource, lyricsA: str
 export function buildEditGraph(spec: SongSpec, source: EditSource, windows: FrameWindow[], filenamePrefix: string): { graph: ApiGraph } {
   const seed = Number(spec.seed);
   const redo = N.frameRanges(windows);
+  const take = sourceTake(source);
   const graph: ApiGraph = {
     ckpt: N.checkpointLoader(spec.checkpoint),
-    source: N.stillsong2LoadTake(source.take),
+    ...take.nodes,
     perform: N.stillsong2Perform({
       clip: ['ckpt', 1],
       style: spec.caption,
@@ -166,13 +190,13 @@ export function buildEditGraph(spec: SongSpec, source: EditSource, windows: Fram
       // The same cap as every song (it sizes the KV cache); the take's own
       // length is kept by forcing its end.
       maxDuration: snapDuration(spec.durationSec),
-      tokens: ['source', 0],
+      tokens: take.tokens,
       redo,
     }),
   };
   graph[SECONDS_OUT] = N.previewAny(['perform', 1]);
   graph.neg = N.conditioningZeroOut(['perform', 0]);
-  graph.hold = N.stillsong2HoldLatent(['source', 1], redo);
+  graph.hold = N.stillsong2HoldLatent(take.latent, redo);
   graph.sample = N.kSampler({
     model: ['ckpt', 0],
     positive: ['perform', 0],
@@ -184,7 +208,7 @@ export function buildEditGraph(spec: SongSpec, source: EditSource, windows: Fram
     sampler: spec.sampler,
     scheduler: spec.scheduler,
   });
-  graph.restore = N.stillsong2RestoreLatent(['sample', 0], ['source', 1], redo);
+  graph.restore = N.stillsong2RestoreLatent(['sample', 0], take.latent, redo);
   graph.take = N.stillsong2SaveTake(['restore', 0], ['perform', 2], filenamePrefix);
   graph.decode = N.vaeDecodeAudio(['restore', 0], ['ckpt', 2]);
   graph.save = N.saveAudioMp3(['decode', 0], filenamePrefix, spec.quality);
@@ -217,6 +241,60 @@ export function buildTakesGraph(spec: SongSpec, source: EditSource, editedAbc: s
     });
     graph[TAKES_OUT.edited(i)] = N.stillsong2Score({ ...prompt, abc: editedAbc, tokens: [`sing_${i}`, 0] });
     graph[TAKES_OUT.original(i)] = N.stillsong2Score({ ...prompt, abc: source.abc, tokens: [`sing_${i}`, 0] });
+  });
+  return { graph };
+}
+
+/**
+ * Several takes of an extension, as tokens only: the source take laid out
+ * anew (`source.layout` opens the gap), `window` sung under the longer plan
+ * once per seed, and each take scored under that plan. The source take under
+ * its own plan is scored too: the kept second after the new bars is compared
+ * with the same music where it used to be (see domain/extension.ts). No audio
+ * is made. The take chosen is then performed by buildEditGraph with the same
+ * layout, plan and seed, which sings the same tokens.
+ */
+export function buildLongerTakesGraph(spec: SongSpec, source: EditSource, longerAbc: string, window: FrameWindow, seeds: number[]): { graph: ApiGraph } {
+  const mode = spec.planMode === 'melody' ? 'melody' : 'full';
+  const prompt = { clip: ['ckpt', 1] as N.Link, style: spec.caption, lyrics: spec.lyrics, mode } as const;
+  const take = sourceTake(source);
+  const graph: ApiGraph = {
+    ckpt: N.checkpointLoader(spec.checkpoint),
+    ...take.nodes,
+    [TAKES_OUT.base]: N.stillsong2Score({ ...prompt, abc: source.abc, tokens: ['source', 0] }),
+  };
+  seeds.forEach((seed, i) => {
+    graph[`sing_${i}`] = N.stillsong2Resing({
+      ...prompt,
+      abc: longerAbc,
+      seed,
+      maxDuration: snapDuration(spec.durationSec),
+      tokens: take.tokens,
+      redo: N.frameRanges([window]),
+    });
+    graph[TAKES_OUT.edited(i)] = N.stillsong2Score({ ...prompt, abc: longerAbc, tokens: [`sing_${i}`, 0] });
+  });
+  return { graph };
+}
+
+/**
+ * New bars for a plan, written by the plan writer itself: it goes on from
+ * `before` (the plan up to the place, see planBefore in domain/extension.ts)
+ * once per seed. No music is made. The texts come back as the nodes' history
+ * texts, to be read by readNewBars.
+ */
+export function buildWriteGraph(spec: SongSpec, before: string, seeds: number[]): { graph: ApiGraph } {
+  const graph: ApiGraph = { ckpt: N.checkpointLoader(spec.checkpoint) };
+  seeds.forEach((seed, i) => {
+    graph[WRITE_OUT(i)] = N.stillsong2ContinuePlan({
+      clip: ['ckpt', 1],
+      style: spec.caption,
+      lyrics: spec.lyrics,
+      abc: before,
+      seed,
+      mode: spec.planMode === 'melody' ? 'melody' : 'full',
+      maxTokens: WRITE_TOKENS,
+    });
   });
   return { graph };
 }

@@ -71,8 +71,16 @@ export interface SongSpec {
    * are the source's. Unlike every other spec, this one is not a recipe for
    * the whole recording (the kept parts come from the source's take), so a
    * full remix must drop it.
+   *
+   * With an edited `abc` it is a melody edit (notes moved) or an extension
+   * (phrases added at one place). `after` belongs to an extension: the phrase
+   * of the source's plan the new ones follow, for when the plans alone leave
+   * that open (one more of a phrase that already repeats). With `write`, the
+   * new phrases are not in `abc` yet: the studio writes them first, in the
+   * manner of the part, and the plan with them in it replaces `abc` (and
+   * `write` goes) before anything is performed.
    */
-  edit?: { sourceId: string };
+  edit?: { sourceId: string; after?: number; write?: boolean };
   quality: Mp3Quality;
   /** Co-writer controls, kept so a remix starts from the same brief. */
   vocalPref: VocalPref;

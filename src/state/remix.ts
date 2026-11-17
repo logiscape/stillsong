@@ -4,6 +4,7 @@
 import type { Song, SongSpec } from '@engine/domain/types';
 import { randomSeed } from '@engine/domain/types';
 import { editedLineCount } from '@engine/cowriter/lyrics';
+import { planBefore } from '@engine/domain/extension';
 
 /** Whether a remix of this song can keep its melody (it performed a saved plan). */
 export function canKeepMelody(song: Song): boolean {
@@ -105,6 +106,20 @@ export function keepRestTake(original: Song, spec: SongSpec): SongSpec {
 export function melodyEditTake(original: Song, editedAbc: string, newSeed: () => string = randomSeed): SongSpec {
   const { edit: _edit, ...spec } = original.spec;
   return { ...spec, seed: newSeed(), abc: editedAbc, edit: { sourceId: original.id } };
+}
+
+/**
+ * The spec that makes a song longer: the studio writes new bars to follow
+ * one phrase of its plan, in the manner of that part, performs them, and
+ * keeps everything else. The plan here is still the original's: the edit asks
+ * for the writing (`write`) and says which phrase the new bars follow, and
+ * the engine puts the plan with them in its place. Null when new bars cannot
+ * follow the phrase (see planBefore).
+ */
+export function longerTake(original: Song, phrase: number, newSeed: () => string = randomSeed): SongSpec | null {
+  if (!original.planAbc || planBefore(original.planAbc, phrase) === null) return null;
+  const { edit: _edit, ...spec } = original.spec;
+  return { ...spec, seed: newSeed(), abc: original.planAbc, edit: { sourceId: original.id, after: phrase, write: true } };
 }
 
 /**

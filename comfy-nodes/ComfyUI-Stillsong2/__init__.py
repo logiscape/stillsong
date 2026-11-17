@@ -291,6 +291,54 @@ class Stillsong2Score:
         return {"ui": {"text": [series]}, "result": (series,)}
 
 
+class Stillsong2ContinuePlan:
+    """Writes on from the middle of a melody plan: given the plan up to some
+    point, the model that writes plans goes on from there for `max_tokens`
+    tokens (or to the plan's end). This is how new bars are written in the
+    manner of the bars before them. Upstream's own plan sampling, unchanged:
+    the only difference from YuE2GenerateABC is that the text already written
+    is put in front of it. Output: the new text alone, also placed in the
+    prompt's history as this node's `text`.
+
+    `abc` should stop at a line break: the text is cut into tokens on its own,
+    and the new text starts a token of its own."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "clip": ("CLIP",),
+                "style": ("STRING", {"multiline": True, "dynamicPrompts": True}),
+                "lyrics": ("STRING", {"multiline": True, "dynamicPrompts": True}),
+                "abc": ("STRING", {"multiline": True, "default": "", "tooltip": "The plan so far."}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": True}),
+                "mode": (["full", "melody"],),
+                "max_tokens": ("INT", {"default": 160, "min": 1, "max": 2000}),
+                # YuE2GenerateABC's own defaults.
+                "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 5.0, "step": 0.05}),
+                "top_p": ("FLOAT", {"default": 0.9, "min": 0.01, "max": 1.0, "step": 0.01}),
+                "top_k": ("INT", {"default": 30, "min": 1, "max": 32768}),
+                "repetition_penalty": ("FLOAT", {"default": 1.005, "min": 0.01, "max": 10.0, "step": 0.005}),
+                "penalty_window": ("INT", {"default": 100, "min": 1, "max": 20000}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("abc",)
+    FUNCTION = "write"
+    CATEGORY = "conditioning/stillsong2"
+    OUTPUT_NODE = True
+
+    def write(self, clip, style, lyrics, abc, seed, mode, max_tokens, temperature, top_p, top_k, repetition_penalty, penalty_window):
+        tokens = clip.tokenize(style, lyrics=lyrics, cot=mode, seed=seed, abc=abc, max_tokens=max_tokens, penalty_window=penalty_window)
+        # The prompt ends where a plan begins; the plan so far follows it, as it would have been written.
+        tokens["prefix"] = list(tokens["prefix"]) + list(tokens["abc_ids"])
+        ids = clip.generate(tokens, max_length=max_tokens, temperature=temperature, top_p=top_p, top_k=top_k,
+                            repetition_penalty=repetition_penalty, seed=seed)
+        text = clip.decode(ids)
+        return {"ui": {"text": [text]}, "result": (text,)}
+
+
 class Stillsong2LoadTake:
     """Reads a take file from ComfyUI's temp or output folder."""
 
@@ -441,6 +489,7 @@ NODE_CLASS_MAPPINGS = {
     "Stillsong2Resing": Stillsong2Resing,
     "Stillsong2ArrangeTake": Stillsong2ArrangeTake,
     "Stillsong2Score": Stillsong2Score,
+    "Stillsong2ContinuePlan": Stillsong2ContinuePlan,
     "Stillsong2LoadTake": Stillsong2LoadTake,
     "Stillsong2HoldLatent": Stillsong2HoldLatent,
     "Stillsong2RestoreLatent": Stillsong2RestoreLatent,
@@ -453,6 +502,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Stillsong2Resing": "Stillsong 2 Resing",
     "Stillsong2ArrangeTake": "Stillsong 2 Arrange Take",
     "Stillsong2Score": "Stillsong 2 Score",
+    "Stillsong2ContinuePlan": "Stillsong 2 Continue Plan",
     "Stillsong2LoadTake": "Stillsong 2 Load Take",
     "Stillsong2HoldLatent": "Stillsong 2 Hold Latent",
     "Stillsong2RestoreLatent": "Stillsong 2 Restore Latent",

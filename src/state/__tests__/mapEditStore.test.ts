@@ -223,6 +223,45 @@ describe('singing new notes from the map', () => {
     expect(state()).toMatchObject({ screen: 'song', selectedSongId: 'new', autoplayOnOpen: true });
   });
 
+  it('asks for new bars after a phrase: the request says where, and comes back with whoever returns to the map', async () => {
+    const HEAD = 'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:G\n';
+    const SUNG = 'V: Vocal\n"G"G2A2B2c2|"D"d8|\nV: Ins\nz8|z8|';
+    const RIFF = 'V: Vocal\n"G"z8|"D"z8|\nV: Ins\nG2B2d2B2|A2d2f2d2|';
+    const plan = `${HEAD}% verse\n${SUNG}\n% interlude\n${RIFF}\n${RIFF}\n% outro\n${SUNG}\n`;
+    const { store, engine, songs, emit, take, state } = await boot();
+    const source = song('orig', { planAbc: plan });
+    void store.playLonger(source, { phrase: 1 });
+    expect(state().mapEdit).toMatchObject({ sourceId: 'orig', songId: '', taken: false, longer: { phrase: 1 } });
+    const queued = await take();
+    const sent = engine.enqueueSong.mock.calls[0] as unknown as [{ abc: string; edit: unknown }, string];
+    // The studio writes the bars: what is sent is the song's own plan, and where the new bars go.
+    expect(sent[0].edit).toEqual({ sourceId: 'orig', after: 1, write: true });
+    expect(sent[0].abc).toBe(plan);
+    expect(sent[1]).toBe('orig');
+    expect(state().mapEdit).toMatchObject({ songId: 'new', taken: true, longer: { phrase: 1 } });
+
+    // A failure keeps what was asked for, and trying again is still that.
+    emit({ kind: 'song_failed', song: { ...queued, status: 'failed', error: 'The studio found nothing new to play there.' } });
+    await tick();
+    expect(state().mapEdit).toMatchObject({ error: 'The studio found nothing new to play there.', longer: { phrase: 1 } });
+    await store.retryMapEdit();
+    expect(state().mapEdit).toMatchObject({ songId: 'new', taken: true, longer: { phrase: 1 } });
+    expect(state().mapEdit!.error).toBeUndefined();
+
+    // Done: the map turns to the longer version, as for new notes.
+    Object.assign(songs[1], { status: 'done' });
+    emit({ kind: 'song_done', song: { ...queued, status: 'done' } });
+    await tick();
+    expect(state()).toMatchObject({ screen: 'map', selectedSongId: 'new', mapArrival: 'new', mapEdit: null });
+  });
+
+  it('asks nothing of the studio for a phrase new bars cannot follow', async () => {
+    const { store, engine, state } = await boot();
+    await store.playLonger(song('orig'), { phrase: 0 }); // "the plan" is no plan at all
+    expect(engine.enqueueSong).not.toHaveBeenCalled();
+    expect(state().mapEdit).toBeNull();
+  });
+
   it('asks for one edit at a time', async () => {
     const { store, engine, take } = await boot();
     void store.singNewNotes(song('orig'), 'edited');

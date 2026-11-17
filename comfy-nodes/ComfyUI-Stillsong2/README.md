@@ -10,6 +10,7 @@ rest of the recording stays exactly as it was.
 | `Stillsong2Resing` | The quick part of performing a take again: sings the `redo` windows and returns the tokens, without building the acoustic conditioning. About a second for a window of a few bars, so several seeds can be tried and scored before one is performed in full. |
 | `Stillsong2Score` | Replays a take under a style, lyric sheet and melody plan in one forward pass and returns the log-probability of every frame's token. |
 | `Stillsong2Align` | Two scores of one take, under two lyric sheets, subtracted: words the second sheet no longer has show as sharp drops at the frames where they are sung. |
+| `Stillsong2ContinuePlan` | Writes on from the middle of a melody plan: the plan so far is put in front of upstream's own plan sampling (`clip.generate`, unchanged), which goes on from there for a number of tokens. This is how new bars are written in the manner of the bars before them. With an empty plan it is `YuE2GenerateABC`. |
 | `Stillsong2ArrangeTake` | Lays a take out anew: spans of it kept in the order given, with gaps of new frames between them (`0-2920,+340,2920-7694`). A gap holds no music until a `redo` window covering it is sung; the other nodes refuse a take whose gaps were never sung. |
 | `Stillsong2SaveTake` | Writes a take (tokens + final latent) to `<output>/<prefix>_NNNNN_.take.safetensors`. |
 | `Stillsong2LoadTake` | Reads a take from ComfyUI's `temp` or `output` folder (`name [temp]` / `name [output]`), nowhere else. |

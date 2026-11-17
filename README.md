@@ -335,6 +335,20 @@ beside the original. The singer treats the notes as a guide, not a rule, so a
 small change may come out subtle. If the studio keeps to the old notes, try
 again for other takes.
 
+**Making a part longer** On a song's map, pause on a phrase where the
+instrument plays alone (an intro, an interlude, a solo) and press "Add new bars
+here", then "Write and perform them". The studio writes new bars to follow that
+phrase, in the manner of the part (new figures over its chords, not the same
+phrase again), opens room for them in the recording, tries a few takes and
+keeps the one that returns to the rest of the song most smoothly. One or two
+phrases are added at a time, up to about a quarter of a minute. The bar before
+the new ones is performed again with them so that they join; everything else
+stays exactly as it is, and the longer song is kept as a new version, where
+the map shows what was written. This is for parts without singing: new sung
+bars would need words of their own. If the studio finds nothing new to play at
+that spot, try again or try from another phrase. A song can be made longer
+again from its new version, up to the studio's length limit.
+
 **If a song stops before its ending** Every song gets the same generous length
 limit. A song that runs out of room is marked in the Song view; a remix with a
 few fewer lines usually lets it finish on its own.

@@ -15,8 +15,8 @@ import { locateBars, pitchContent, type BarGrid } from '@engine/domain/barGrid';
 import type { SongMap } from '@engine/domain/songMap';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
-import { beyondStopping, type MapEditState } from './mapEdit';
-import { melodyEditTake } from './remix';
+import { beyondStopping, type MapEditState, type MorePhrase } from './mapEdit';
+import { longerTake, melodyEditTake } from './remix';
 import { routeForBoot } from './route';
 
 export type Screen = 'setup' | 'update' | 'create' | 'sanctuary' | 'song' | 'map' | 'remix' | 'about' | 'draw';
@@ -448,11 +448,25 @@ export async function enqueueRemix(spec: SongSpec, parentId: string): Promise<vo
  * turns to it, at the bars that were sung again.
  */
 export async function singNewNotes(source: Song, editedAbc: string): Promise<void> {
+  await askMapEdit(source, melodyEditTake(source, editedAbc));
+}
+
+/**
+ * Has the studio write new bars to follow one phrase of `source`, perform
+ * them, and keep everything else: the song gets longer by those bars. As
+ * singNewNotes, it all happens on the map.
+ */
+export async function playLonger(source: Song, more: MorePhrase): Promise<void> {
+  const spec = longerTake(source, more.phrase);
+  if (spec) await askMapEdit(source, spec, more);
+}
+
+async function askMapEdit(source: Song, spec: SongSpec, longer?: MorePhrase): Promise<void> {
   if (state.mapEdit && !state.mapEdit.error) return;
-  const asked: MapEditState = { sourceId: source.id, songId: '', taken: false, abc: editedAbc, since: Date.now() };
+  const asked: MapEditState = { sourceId: source.id, songId: '', taken: false, abc: spec.abc ?? '', longer, since: Date.now() };
   setState({ mapEdit: asked });
   try {
-    const queued = await getEngine().enqueueSong(melodyEditTake(source, editedAbc), source.id);
+    const queued = await getEngine().enqueueSong(spec, source.id);
     // Put away while the studio was still taking it: it must not go ahead, and must not come back on screen.
     if (state.mapEdit !== asked) return void (await cancelSong(queued.id));
     setState({ mapEdit: { ...asked, songId: queued.id, taken: true } });
@@ -493,7 +507,7 @@ export async function retryMapEdit(): Promise<void> {
   if (!edit?.error) return;
   if (!edit.songId) return setState({ mapEdit: null }); // it never reached the studio: asking again is "Sing the new notes"
   // The song is known already, but there is no job to stop until the studio has taken it again.
-  const again: MapEditState = { sourceId: edit.sourceId, songId: edit.songId, taken: false, abc: edit.abc, since: Date.now() };
+  const again: MapEditState = { sourceId: edit.sourceId, songId: edit.songId, taken: false, abc: edit.abc, longer: edit.longer, since: Date.now() };
   const current = () => state.mapEdit?.songId === again.songId && state.mapEdit.since === again.since;
   stoppedEdits.delete(again.songId);
   setState({ mapEdit: again });

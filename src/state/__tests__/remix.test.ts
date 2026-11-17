@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSpec, type Song, type SongSpec } from '@engine/domain/types';
-import { canKeepMelody, canKeepRest, keepRestTake, keepsRestByDefault, melodyEditTake, offersKeepRest, offersMelodyChoice, remixNeedsNewSeed, remixTake, reshapesLyrics } from '../remix';
+import { canKeepMelody, canKeepRest, keepRestTake, keepsRestByDefault, longerTake, melodyEditTake, offersKeepRest, offersMelodyChoice, remixNeedsNewSeed, remixTake, reshapesLyrics } from '../remix';
 
 const PLAN = 'X:1\nV: Vocal\n% verse\n|: C D E F :|';
 
@@ -138,5 +138,39 @@ describe('a melody edit', () => {
   it('is made from a version that was itself an edit, and names that version as its source', () => {
     const v2 = song({ id: 'v2', takePath: 'y', parentId: 'orig' }, { edit: { sourceId: 'orig' } });
     expect(melodyEditTake(v2, 'plan', () => '9').edit).toEqual({ sourceId: 'v2' });
+  });
+});
+
+describe('a longer song', () => {
+  // Two bars sung, then two phrases played (the same tune), then two bars sung.
+  const HEAD = 'X:1\nM:4/4\nL:1/8\nQ:1/4=120\nK:G\n';
+  const SUNG = 'V: Vocal\n"G"G2A2B2c2|"D"d8|\nV: Ins\nz8|z8|';
+  const RIFF = 'V: Vocal\n"G"z8|"D"z8|\nV: Ins\nG2B2d2B2|A2d2f2d2|';
+  const PLAN = `${HEAD}% verse\n${SUNG}\n% interlude\n${RIFF}\n${RIFF}\n% outro\n${SUNG}\n`;
+  const song = (over: Partial<Song> = {}): Song => ({
+    id: 'orig', createdAt: 1, status: 'done', planAbc: PLAN, takePath: 'take',
+    spec: { ...defaultSpec(), title: 'Song', lyrics: '[verse]\nA line\n[interlude]\n[outro]\nAnother', seed: '111' },
+    ...over,
+  });
+
+  it('asks the studio to write new bars after one phrase: the plan is still the original\'s, with a seed of its own', () => {
+    const spec = longerTake(song(), 1, () => '555')!;
+    expect(spec.abc).toBe(PLAN);
+    expect(spec.edit).toEqual({ sourceId: 'orig', after: 1, write: true });
+    expect(longerTake(song(), 2, () => '555')!.edit).toEqual({ sourceId: 'orig', after: 2, write: true });
+    expect(spec.seed).toBe('555');
+    expect(spec.lyrics).toBe(song().spec.lyrics);
+  });
+
+  it('is made from the version it is asked of, not from that version\'s source', () => {
+    const v2 = song({ id: 'v2', spec: { ...song().spec, edit: { sourceId: 'orig', after: 1 } } });
+    expect(longerTake(v2, 2, () => '9')!.edit).toEqual({ sourceId: 'v2', after: 2, write: true });
+  });
+
+  it('is nothing for a phrase new bars cannot follow, or a song without a plan', () => {
+    expect(longerTake(song(), 0)).toBeNull(); // sung
+    expect(longerTake(song(), 3)).toBeNull(); // the last phrase
+    expect(longerTake(song(), 7)).toBeNull();
+    expect(longerTake(song({ planAbc: undefined }), 1)).toBeNull();
   });
 });

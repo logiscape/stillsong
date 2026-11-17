@@ -189,6 +189,40 @@ export const stillsong2LoadTake = (take: string): ApiNode => ({
   inputs: { take },
 });
 
+/**
+ * Lays a take out anew: `layout` such as `0-2920,+340,2920-7694` opens 340 new
+ * frames at frame 2920. The gap holds no music until a redo window covering it
+ * is sung. Outputs: 0 tokens, 1 LATENT (both the new length).
+ */
+export const stillsong2ArrangeTake = (tokens: Link, samples: Link, layout: string): ApiNode => ({
+  class_type: 'Stillsong2ArrangeTake',
+  inputs: { tokens, samples, layout },
+});
+
+/**
+ * Writes on from the middle of a melody plan: `abc` is the plan so far (ending
+ * at a line break), and the plan writer goes on from there for `maxTokens`
+ * tokens. Sampling settings are the plan node's own (yue2GenerateAbc). Its
+ * /history `text` is the new text alone.
+ */
+export const stillsong2ContinuePlan = (p: { clip: Link; style: string; lyrics: string; abc: string; seed: number; mode: 'full' | 'melody'; maxTokens: number }): ApiNode => ({
+  class_type: 'Stillsong2ContinuePlan',
+  inputs: {
+    clip: p.clip,
+    style: p.style,
+    lyrics: p.lyrics,
+    abc: p.abc,
+    seed: p.seed,
+    mode: p.mode,
+    max_tokens: p.maxTokens,
+    temperature: 0.7,
+    top_p: 0.9,
+    top_k: 30,
+    repetition_penalty: 1.005,
+    penalty_window: 100,
+  },
+});
+
 /** Marks the redo windows for the sampler; every other frame of the latent is held. */
 export const stillsong2HoldLatent = (samples: Link, redo: string): ApiNode => ({
   class_type: 'Stillsong2HoldLatent',

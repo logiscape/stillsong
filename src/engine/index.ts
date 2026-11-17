@@ -12,11 +12,14 @@ import { AUDIO_FRAMES_PER_SECOND, DURATION, defaultSpec, randomSeed } from './do
 import { validateSpec, type ValidationIssue } from './domain/validate';
 import { hardwareTier, type HardwareTier } from './domain/duration';
 import type { HardwareInfo, RuntimeInstallState } from './ports';
-import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, buildTakesGraph, EDIT_PHASES, PLAN_OUT, SECONDS_OUT, TAKES_OUT, type EditSource } from './comfy/graphBuilder';
+import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, buildLongerTakesGraph, buildTakesGraph, buildWriteGraph, EDIT_PHASES, WRITE_OUT, PLAN_OUT, SECONDS_OUT, TAKES_OUT, type EditSource } from './comfy/graphBuilder';
 import { TAKE_NODE, type ApiGraph } from './comfy/nodes';
 import { editWindows, mergeWindows, parseAlignSeries } from './domain/editWindows';
 import { readBarGrid, type BarGrid } from './domain/barGrid';
 import { changedBars, chooseTake, melodyWindows, parseScoreSeries, scoreTake } from './domain/melodyEdit';
+import {
+  addedPhrases, bestNewBars, extendedGrid, extensionCut, extensionSeam, MAX_TAKE_FRAMES, planBefore, readNewBars, roomForBars, smoothestTake, type ExtensionCut,
+} from './domain/extension';
 import { buildSongMap } from './domain/songMap';
 import { ComfyClient, type HistoryEntry } from './comfy/client';
 import { ProgressTracker, type ProgressEvent } from './comfy/events';
@@ -51,6 +54,16 @@ export function takeRelPath(songId: string): string {
 const TAKE_UPLOAD_FOLDER = 'stillsong2';
 /** Takes a melody edit sings before choosing one. Five gave a smooth take every time it was tried by ear; each costs about two seconds. */
 const MELODY_TAKES = 5;
+
+/**
+ * The studio's reason for refusing a longer take, in plain words. The length
+ * is checked before anything is sent; what cannot be known here is how much
+ * room the words and the plan leave (they share the studio's memory with the
+ * music), and the nodes say so in their own terms.
+ */
+function extensionError(message: string): string {
+  return /music budget|model context|studio can hold/i.test(message) ? 'The song is as long as the studio can make it.' : message;
+}
 
 type ProgressFn = (phase: string, extra?: Partial<JobProgress>) => void;
 type PromptOutcome = { kind: 'success'; perform?: PerformProgress } | { kind: 'interrupted' } | { kind: 'error'; message: string };
@@ -535,10 +548,19 @@ export class Engine {
     if (!source?.takePath || !abc.trim() || !(await this.ports.files.exists(source.takePath))) {
       throw new Error('The original recording is no longer here to keep.');
     }
-    // The plan itself was edited: a melody edit. Its windows come from the
-    // changed bars, not from where words are sung.
-    const melody = !!song.spec.abc?.trim() && song.spec.abc !== abc;
-    const bars = melody ? this.melodyBars(song, source, abc) : null;
+    // New bars asked for, not yet written: the studio writes them into the
+    // plan first, and from there on this is an extension like any other.
+    if (song.spec.edit!.write) {
+      const written = await this.writeNewBars(job, song, source, abc, progress);
+      if (written === 'cancelled') return 'cancelled';
+      song = written;
+    }
+    // The plan itself was edited. Phrases added at one place: an extension,
+    // performed into a gap opened in the take. Otherwise a melody edit, whose
+    // windows come from the changed bars, not from where words are sung.
+    const planned = !!song.spec.abc?.trim() && song.spec.abc !== abc;
+    const longer = planned ? this.extensionPlan(song, source, abc) : null;
+    const bars = planned && !longer ? this.melodyBars(song, source, abc) : null;
     // A name of its own for every edit. The studio keeps a take it has loaded
     // open (the file is memory-mapped), and on Windows an open file cannot be
     // written over: a second edit of one song, sent under the first one's
@@ -546,6 +568,7 @@ export class Engine {
     const uploadName = `${source.id.slice(0, 8)}_${newId().slice(0, 6)}.take.safetensors`;
     const take = await this.comfy.uploadTemp(takeRelPath(source.id), uploadName, TAKE_UPLOAD_FOLDER);
     const from: EditSource = { take, abc };
+    if (longer) return this.runExtension(job, song, source, from, longer, startedAt, progress);
     if (bars) return this.runMelodyEdit(job, song, source, from, bars, startedAt, progress);
 
     const asked = await this.sungWindows(job, song, from, source.spec.lyrics, finding, progress);
@@ -679,6 +702,141 @@ export class Engine {
   }
 
   /**
+   * Has the studio write new bars for the plan, to follow phrase
+   * `spec.edit.after` of the source: the plan writer goes on from the end of
+   * that phrase, once per seed, and the attempt that reads best is put into
+   * the plan (readNewBars, bestNewBars). When none of them wrote anything
+   * usable there, it is asked again for an instrument's line alone, over the
+   * chords of the phrase the new bars follow. The song's spec then holds the
+   * longer plan and no longer asks for writing, so a retry after a later
+   * failure performs the bars that were written.
+   *
+   * Everything that would stop the extension later is checked first: nothing
+   * is written for a song that cannot be made longer.
+   */
+  private async writeNewBars(job: Job, song: Song, source: Song, abc: string, progress: ProgressFn): Promise<Song | 'cancelled'> {
+    const after = song.spec.edit!.after;
+    if (song.spec.lyrics !== source.spec.lyrics) throw new Error('Make the song longer or change its words, one at a time.');
+    const map = buildSongMap(abc, source.spec.lyrics);
+    if (!map || after === undefined || planBefore(abc, after) === null) throw new Error('New bars cannot follow that phrase: it has to be one that is played, not sung, with more of the song after it.');
+    const grid = readBarGrid(source.barGrid, map.phrases.length);
+    if (!grid) throw new Error('The bars of this recording have not been found yet. Open its Song map first.');
+    const frames = Math.round((source.actualSec ?? 0) * AUDIO_FRAMES_PER_SECOND);
+    if (!extensionCut(map, grid, { after, phrases: 1, bars: 1, sung: false }, frames)) throw new Error('The place for the new bars is not in the recording.');
+    const room = roomForBars(map, grid, after, frames);
+    if (!room) throw new Error('The song is as long as the studio can make it.');
+
+    const writing = EDIT_PHASES.writing;
+    progress(writing);
+    const first = Number(song.spec.seed);
+    const seeds = Array.from({ length: MELODY_TAKES }, (_, i) => first + i);
+    for (const lineOnly of [false, true]) {
+      const before = planBefore(abc, after, lineOnly);
+      if (before === null) continue;
+      const { graph } = buildWriteGraph(song.spec, before, seeds);
+      const tried = await this.runPrompt(job, graph, progress, { label: writing });
+      if (tried.outcome.kind === 'interrupted') return 'cancelled';
+      if (tried.outcome.kind === 'error') throw new Error(tried.outcome.message);
+      const texts = (await this.comfy.history(tried.promptId))?.texts ?? {};
+      const found = seeds.map((_, i) => readNewBars(abc, source.spec.lyrics, after, texts[WRITE_OUT(i)] ?? '', room, lineOnly));
+      const pick = bestNewBars(found);
+      if (pick >= 0) {
+        const spec: SongSpec = { ...song.spec, abc: found[pick]!.abc, edit: { sourceId: source.id, after } };
+        await this.songs.setSpec(song.id, spec);
+        return { ...song, spec };
+      }
+    }
+    // A retry sends this same song back: it must not be given the same attempts again.
+    await this.songs.setSpec(song.id, { ...song.spec, seed: String(first + MELODY_TAKES) });
+    throw new Error('The studio found nothing new to play there. Try again, or from another phrase.');
+  }
+
+  /**
+   * What an extension performs, when this edit is one: the song's plan is the
+   * source's with phrases added at one place. Null when it is not (a melody
+   * edit, or nothing this can do: melodyBars says which). Throws, in plain
+   * words, for an extension that cannot be performed.
+   */
+  private extensionPlan(song: Song, source: Song, abc: string): { cut: ExtensionCut; barGrid: BarGrid } | null {
+    const before = buildSongMap(abc, source.spec.lyrics);
+    const after = buildSongMap(song.spec.abc!, source.spec.lyrics);
+    const added = before && after ? addedPhrases(before, after, song.spec.edit?.after) : null;
+    if (!before || !added) return null;
+    if (song.spec.lyrics !== source.spec.lyrics) throw new Error('Make the song longer or change its words, one at a time.');
+    if (added.sung) throw new Error('Only a part without singing can be made longer while the rest is kept.');
+    const grid = readBarGrid(source.barGrid, before.phrases.length);
+    if (!grid) throw new Error('The bars of this recording have not been found yet. Open its Song map first.');
+    const frames = Math.round((source.actualSec ?? 0) * AUDIO_FRAMES_PER_SECOND);
+    const cut = extensionCut(before, grid, added, frames);
+    if (!cut) throw new Error('The place for the new bars is not in the recording.');
+    if (cut.frames > MAX_TAKE_FRAMES) throw new Error('The song is as long as the studio can make it.');
+    return { cut, barGrid: extendedGrid(before, grid, added, cut) };
+  }
+
+  /**
+   * An extension (spec.edit with phrases added to spec.abc): the take is laid
+   * out anew with a gap where the new bars go, the gap and the bar before it
+   * are performed under the longer plan, and everything else is kept.
+   *
+   *  1. Several takes are sung, tokens only, one per seed, and each is scored
+   *     under the longer plan.
+   *  2. The take that hands back to the kept recording best is performed in
+   *     full. There is no old tune for a take to cling to here, so none is
+   *     turned away: the best of them is performed.
+   */
+  private async runExtension(
+    job: Job,
+    song: Song,
+    source: Song,
+    from: EditSource,
+    plan: { cut: ExtensionCut; barGrid: BarGrid },
+    startedAt: number,
+    progress: ProgressFn,
+  ): Promise<'done' | 'cancelled'> {
+    const longer = song.spec.abc!;
+    const { cut } = plan;
+    const laidOut: EditSource = { ...from, layout: cut.layout };
+    const trying = EDIT_PHASES.extending;
+    progress(trying);
+    const first = Number(song.spec.seed);
+    const seeds = Array.from({ length: MELODY_TAKES }, (_, i) => first + i);
+    const { graph: takes } = buildLongerTakesGraph(song.spec, laidOut, longer, cut.window, seeds);
+    const tried = await this.runPrompt(job, takes, progress, { label: trying });
+    if (tried.outcome.kind === 'interrupted') return 'cancelled';
+    if (tried.outcome.kind === 'error') throw new Error(extensionError(tried.outcome.message));
+    const texts = (await this.comfy.history(tried.promptId))?.texts ?? {};
+    const base = parseScoreSeries(texts[TAKES_OUT.base]);
+    const seams = seeds.map((_, i) => {
+      const under = parseScoreSeries(texts[TAKES_OUT.edited(i)]);
+      const seam = base && under ? extensionSeam(cut, base, under) : null;
+      if (seam === null) throw new Error('The studio did not say how the new takes went.');
+      return seam;
+    });
+    const pick = smoothestTake(seams);
+
+    // The song is the take that was chosen: its seed is the one performed.
+    const spec = { ...song.spec, seed: String(seeds[pick]) };
+    await this.songs.setSpec(song.id, spec);
+    const chosen = { ...song, spec };
+    const prefix = `${renderFilePrefix(song.id)}_${newId().slice(0, 6)}`;
+    const { graph } = buildEditGraph(spec, { ...laidOut, abc: longer }, [cut.window], prefix);
+    const { promptId, outcome } = await this.runPrompt(job, graph, progress, { record: chosen });
+    if (outcome.kind === 'interrupted') return 'cancelled';
+    if (outcome.kind === 'error') throw new Error(extensionError(outcome.message));
+    await this.jobs.setState(job.id, 'harvesting');
+    this.emit({ kind: 'queue_changed' });
+    progress(HARVEST_PHASE);
+    await this.harvest(job, chosen, promptId, startedAt, outcome.perform, {
+      source,
+      windows: [cut.window],
+      planAbc: longer,
+      actualSec: cut.frames / AUDIO_FRAMES_PER_SECOND,
+      barGrid: JSON.stringify(plan.barGrid),
+    });
+    return 'done';
+  }
+
+  /**
    * Where does `from.take` sing words of `originalLyrics` that this song's
    * lyrics no longer have? The windows to sing again (empty: nowhere).
    */
@@ -705,8 +863,12 @@ export class Engine {
     promptId: string,
     startedAt: number | undefined,
     perform?: PerformProgress,
-    /** A "keep the rest" edit: what it kept from, the windows it sang again, and the plan it performed when that is not the source's. */
-    edit?: { source: Song; windows: FrameWindow[]; planAbc?: string },
+    /**
+     * A "keep the rest" edit: what it kept from, the windows it sang again,
+     * and the plan it performed when that is not the source's. An extension
+     * also says how long the recording is now and where its bars fall.
+     */
+    edit?: { source: Song; windows: FrameWindow[]; planAbc?: string; actualSec?: number; barGrid?: string },
   ): Promise<void> {
     const hist = await this.comfy.history(promptId);
     const audio = hist?.files.find((f) => AUDIO_FILE.test(f.filename));
@@ -717,10 +879,11 @@ export class Engine {
     // take could not be copied still plays, and can still be remixed whole.
     const takePath = take ? await this.comfy.downloadOutput(take, takeRelPath(song.id)).catch(() => undefined) : undefined;
     const finishedAt = this.ports.clock.now();
-    // An edit keeps its source's length exactly, and so whether that take
-    // was cut off; a render reports its own.
+    // An edit keeps its source's length exactly (an extension adds the
+    // frames that went in), and so whether that take was cut off; a render
+    // reports its own.
     const composed = edit
-      ? { actualSec: edit.source.actualSec ?? composedLength(hist, song.spec)?.actualSec, hitCeiling: edit.source.hitCeiling ?? false }
+      ? { actualSec: edit.actualSec ?? edit.source.actualSec ?? composedLength(hist, song.spec)?.actualSec, hitCeiling: edit.source.hitCeiling ?? false }
       : composedLength(hist, song.spec, perform);
     await this.songs.setOutput(song.id, {
       outputPath: outPath,
@@ -730,8 +893,10 @@ export class Engine {
       takePath,
       editWindows: edit?.windows,
     });
-    // An edit keeps its source's length and bars, so the bars sit where they did.
-    if (edit?.source.barGrid) await this.songs.setBarGrid(song.id, edit.source.barGrid);
+    // An edit keeps its source's length and bars, so the bars sit where they
+    // did; after an extension, the bars that follow the new ones sit later.
+    const barGrid = edit?.barGrid ?? edit?.source.barGrid;
+    if (barGrid) await this.songs.setBarGrid(song.id, barGrid);
     // The library now holds the only copies that matter. ComfyUI's originals
     // would otherwise accumulate forever (and outlive "delete song" — the
     // mp3's ID3 tag carries the full prompt).

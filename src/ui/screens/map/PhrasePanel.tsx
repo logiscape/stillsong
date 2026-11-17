@@ -24,6 +24,20 @@ export interface PhraseEdit {
   canLower: boolean;
   /** The studio is singing these notes: they show as moved, and stay where they are. */
   locked: boolean;
+  /** Said in place of the usual hint while the notes are locked for another reason. */
+  lockedNote?: string;
+}
+
+/** New bars after the phrase on show, written by the studio in the manner of the part: the song gets longer. For a phrase that is played, not sung. */
+export interface PhraseMore {
+  /** New bars are set to follow this phrase. */
+  asked: boolean;
+  /** The most the song can get longer by, in seconds. */
+  seconds: number;
+  onAsk: () => void;
+  /** The studio is at work, there is no room, or something else has to be finished first: `note` says what. */
+  locked: boolean;
+  note?: string;
 }
 
 function Roll({ map, it, edit }: { map: SongMap; it: MapPhrase; edit?: PhraseEdit }): React.ReactElement {
@@ -94,9 +108,11 @@ export interface PhrasePanelProps {
   edit?: PhraseEdit;
   /** Why they cannot, when that is worth saying. */
   editNote?: string;
+  /** Present when the phrase on show is one that can be played again. */
+  more?: PhraseMore;
 }
 
-export function PhrasePanel({ map, timing, now, cursorRef, onJump, edit, editNote }: PhrasePanelProps): React.ReactElement {
+export function PhrasePanel({ map, timing, now, cursorRef, onJump, edit, editNote, more }: PhrasePanelProps): React.ReactElement {
   const it = map.phrases[now];
   const p = it.phrase;
   const pickable = !!edit && !edit.locked && p.vocal.length > 0;
@@ -154,12 +170,23 @@ export function PhrasePanel({ map, timing, now, cursorRef, onJump, edit, editNot
             <Button variant="secondary" size="sm" icon="chevron-down" disabled={edit.locked || edit.picked === null || !edit.canLower} onClick={() => edit.onStep(-1)}>Lower</Button>
             <span style={{ font: 'var(--ui-sm)', color: 'var(--ink-3)' }}>
               {edit.locked
-                ? 'The studio is singing your notes. They can be moved again when it is done.'
+                ? edit.lockedNote ?? 'The studio is singing your notes. They can be moved again when it is done.'
                 : edit.picked === null ? 'Pick one of the singer’s notes to move it.' : 'Each press moves it one step of the key. Notes tied together move together.'}
             </span>
           </div>
         )}
         {!edit && editNote && p.vocal.length > 0 && <span style={{ font: 'var(--ui-sm)', color: 'var(--ink-3)', marginTop: 4 }}>{editNote}</span>}
+        {more && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 10px', marginTop: 4 }}>
+            <Button variant="secondary" size="sm" disabled={more.locked || more.asked} onClick={more.onAsk}>Add new bars here</Button>
+            <span style={{ font: 'var(--ui-sm)', color: 'var(--ink-3)', flex: '1 1 220px', minWidth: 0 }}>
+              {more.note
+                ?? (more.asked
+                  ? 'New bars are set to follow this phrase.'
+                  : `The studio can write new bars in the manner of this part, to follow this phrase: up to ${Math.round(more.seconds)} seconds more.`)}
+            </span>
+          </div>
+        )}
       </div>
 
       <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>

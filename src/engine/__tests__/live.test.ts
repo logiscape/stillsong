@@ -8,6 +8,7 @@ import { Engine, type JobProgress } from '@engine/index';
 import { defaultSpec, YUE2_CHECKPOINT } from '@engine/domain/types';
 import { stepNote } from '@engine/domain/melodyPlan';
 import { buildSongMap } from '@engine/domain/songMap';
+import { addedPhrases, canRepeatPhrase, extensionCut, roomForBars } from '@engine/domain/extension';
 import { livePorts } from './livePorts';
 
 const LIVE = process.env.STILLSONG2_LIVE === '1';
@@ -270,6 +271,86 @@ describe.runIf(LIVE)('live: ComfyUI end-to-end', () => {
     }
     expect(keptLatent).toBe(true);
     expect(await audioHash(b.outputPath!)).not.toBe(await audioHash(a.outputPath!));
+  });
+
+  it('new bars written after a phrase make the song longer by those bars and keep everything else', { timeout: 900_000 }, async () => {
+    const engine = await Engine.create(livePorts({ ws: true }));
+    expect(await engine.comfy.hasNode('Stillsong2ContinuePlan'), 'comfy-nodes/ComfyUI-Stillsong2 is not loaded, or is an older one').toBe(true);
+    const phases: string[] = [];
+    engine.on((e) => {
+      if (e.kind === 'progress' && phases[phases.length - 1] !== e.progress.phase) phases.push(e.progress.phase);
+    });
+    const nextOutcome = () =>
+      new Promise<string | undefined>((resolve) => {
+        const off = engine.on((e) => {
+          if (e.kind !== 'song_done' && e.kind !== 'song_failed') return;
+          off();
+          resolve(e.kind === 'song_done' ? undefined : (e.song.error ?? 'failed'));
+        });
+      });
+    // An intro and an interlude: parts that are played, not sung.
+    const lyrics = '[Intro]\n[Verse]\nMorning light on the kitchen floor\nCoffee steam and an open door\n[Interlude]\n[Verse]\nA paper boat on the window sill\nThe radio plays and the house is still\n[Outro]';
+    const spec = { ...defaultSpec(), title: 'Longer draft', caption: STOCK_CAPTION, lyrics, targetSec: 40, durationSec: 80, seed: '5150' };
+
+    let outcome = nextOutcome();
+    const first = await engine.enqueueSong(spec);
+    expect(await outcome).toBeUndefined();
+    const a = (await engine.songs.byId(first.id))!;
+    const before = await readTake(a.takePath!);
+    const frames = before.codes.length;
+
+    // As in the melody test, the plan's tempo stands in for the bars found from the audio.
+    const map = buildSongMap(a.planAbc!, lyrics)!;
+    const grid = { v: 1 as const, shifts: map.phrases.map(() => 0) };
+    await engine.saveBarGrid(a.id, grid);
+    const plan = map.phrases.map((p) => p.phrase);
+    // The first phrase new bars can follow, at a place the recording holds, with room for a phrase as long.
+    const phrase = plan.findIndex((p, i) => canRepeatPhrase(plan, i) && roomForBars(map, grid, i, frames) >= p.bars);
+    expect(phrase, 'no phrase without singing for new bars to follow in the plan the studio wrote').toBeGreaterThanOrEqual(0);
+
+    // The studio writes the bars itself: what is asked for is the place.
+    outcome = nextOutcome();
+    const second = await engine.enqueueSong({ ...spec, seed: '9101', abc: a.planAbc, edit: { sourceId: a.id, after: phrase, write: true } }, a.id);
+    expect(await outcome).toBeUndefined();
+    const b = (await engine.songs.byId(second.id))!;
+    expect(b.status).toBe('done');
+    expect(b.spec.edit).toEqual({ sourceId: a.id, after: phrase });
+    expect(b.spec.abc).toBe(b.planAbc);
+    // The longer plan is the song with phrases added after that one: played, not sung, and not all of them heard before.
+    const longer = buildSongMap(b.planAbc!, lyrics)!;
+    const ext = addedPhrases(map, longer, phrase)!;
+    expect(ext).toMatchObject({ after: phrase, sung: false });
+    const tunes = new Set(plan.map((p) => p.lines.join('\n')));
+    expect(longer.phrases.slice(phrase + 1, phrase + 1 + ext.phrases).some((p) => !tunes.has(p.phrase.lines.join('\n')))).toBe(true);
+    const cut = extensionCut(map, grid, ext, frames)!;
+    const added = cut.gap[1] - cut.gap[0];
+    expect(b.actualSec).toBeCloseTo(a.actualSec! + added / 25, 6);
+    expect(['9101', '9102', '9103', '9104', '9105']).toContain(b.spec.seed);
+    expect(b.editWindows).toEqual([cut.window]);
+    expect(JSON.parse(b.barGrid!).shifts).toHaveLength(map.phrases.length + ext.phrases);
+    expect(phases.indexOf('Composing (writing the new bars)')).toBeGreaterThanOrEqual(0);
+    expect(phases.indexOf('Composing (writing the new bars)')).toBeLessThan(phases.indexOf('Composing (trying the new bars)'));
+
+    const after = await readTake(b.takePath!);
+    expect(after.codes.length).toBe(frames + added);
+    // Where a frame of the original is in the longer take; the window is performed anew, the rest kept.
+    const [start, end] = cut.window;
+    const now = (i: number) => (i < cut.gap[0] ? i : i + added);
+    let keptTokens = true;
+    for (let i = 0; i < frames; i++) if ((now(i) < start || now(i) >= end) && before.codes[i] !== after.codes[now(i)]) keptTokens = false;
+    expect(keptTokens).toBe(true);
+    expect(new Set(after.codes.subarray(cut.gap[0], cut.gap[1])).size).toBeGreaterThan(10); // the new bars hold music
+    let keptLatent = true;
+    for (let channel = 0; channel < 64 && keptLatent; channel++) {
+      for (let i = 0; i < frames; i++) {
+        if (now(i) >= start && now(i) < end) continue;
+        if (before.latent.readUInt32LE((channel * frames + i) * 4) !== after.latent.readUInt32LE((channel * (frames + added) + now(i)) * 4)) {
+          keptLatent = false;
+          break;
+        }
+      }
+    }
+    expect(keptLatent).toBe(true);
   });
 
   it('renders via the history-poll fallback when WS is unavailable', { timeout: 900_000 }, async () => {

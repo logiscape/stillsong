@@ -1,0 +1,85 @@
+{
+ "note": "What the plan writer wrote, live on 2026-11-17 (ComfyUI v0.42.4, Stillsong2ContinuePlan, 200 tokens for \"free\", 120 for \"ins\"), going on from the end of a phrase of a starter song (\"free\") or from the singer's line of that phrase given again (\"ins\"). Keys: \"<song>|<phrase>\", then the seed. The texts stop where the tokens ran out.",
+ "written": {
+  "Iron Ghost|33": {
+   "free": {
+    "11": "V: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z4d2f2|\nV: Ins\nA6GA|B4A2G2|F2E2D2C2|A,4z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d'4a3c'|\"Dm\"b4a4|\"C\"g4b4|\"C\"a4d2d2|\nV: Ins\nZ4|\nV",
+    "22": "V: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA6GA|B4A2G2|F2E2D2C2|D2E2F2E2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nDDDEFEFG|ADADADBD|ADADADBD|ADGDFDED|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z4d2f2|\nV: Ins\nDDDEFEFG|ADADADBD|ADADADBD|ADGDz4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"",
+    "33": "V: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA6GA|B4A2G2|F2E2D2C2|D4D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nd4a4-|a4z2g2|b4a2g2|f2e2d4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\na8-|a4z2g2|b4a2g2|f2e2z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4",
+    "44": "V: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z4d2f2|\nV: Ins\nA6GA|B4A2G2|F2E2D2C2|A,4z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d'4a3c'|\"Dm\"b4a3g|\"C\"g4b4|\"C\"a4d2d2|\nV: Ins\nZ4|\n",
+    "55": "V: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA6GA|B4A2G2|F2E2D2C2|A,2G,2F,2E,2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nd6cd|e4f4|e6de|f4g4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\na6ga|b4a2g2|f2e2d2c2|A2G2F2E2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\n"
+   },
+   "ins": {
+    "11": "A8-|A4z2GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Bbmaj7\"z8|\"Bbmaj7\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA8-|A4z2GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nA8-|A4",
+    "22": "A2A2A2GA|B2B2A2G2|F2E2D2C2|A,2G,2F,2E,2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD,4a4-|a4z2ga|b4a2g2|f2e2d4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm",
+    "33": "A8-|A4z2GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA8-|A4z2GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nA8-|A4z2GA|",
+    "44": "A8-|A4d2f2|a4d4|f2g2g4|\nV: Vocal\n\"C\"z8|\"C\"z8|\"Bb\"z8|\"Bb\"z8|\nV: Ins\ng2g2g2ga|g2f2d4|a4d4|f2g2g4|\nV: Vocal\n\"Gm\"z8|\"Gm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\ng2g2g2ga|",
+    "55": "A6GA|B4A2G2|F2E2D2C2|A,2G,2F,2E,2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nD,8-|D,8|Z|z2d2z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\""
+   }
+  },
+  "Where the Old Gods Stood|28": {
+   "free": {
+    "11": "V: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C/D\"z8|\"Dm\"z16|\nV: Ins\nD4A2A2",
+    "22": "V: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C/D\"z8|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nd16|d2e2f2e2d4c4|d16|d2e2f2e2d4c4|\nV: Vocal\n\"F\"z16|\"F\"z16|\"C\"z16|\"C\"z16|\nV: Ins\nA16|A2B2c2B",
+    "33": "V: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8",
+    "44": "V: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV:",
+    "55": "V: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\"Dm\"z16|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV:"
+   },
+   "ins": {
+    "11": "D4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nD4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|",
+    "22": "D4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nd4a4a4g2a2|b4g4a4d2e2|f4g4e4c4|d16|\nV:",
+    "33": "D4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nd8e8|f8g8|d8e8|f8g8|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C",
+    "44": "z4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z16|\"Bb\"z16|\"Bb\"z16|\nV: Ins\nd8d8-|d8d4e2f2|f12e2d2|d16|\nV: Vocal\n\"F\"z16|\"F\"z16|\"",
+    "55": "D4A2A2A4G2A2|B4G2B2A4D2E2|F4G2F2E4C4|D16|\nV: Vocal\n\"Dm\"z16|\"Dm\"z8\"C\"z8|\"Bb\"z16|\"Bb\"z8\"C\"z8|\nV: Ins\nd16-|d8e8|f16-|f8g8|\nV: Vocal\n\"F\"z16|\"F\"z16|\"C"
+   }
+  },
+  "The Last Ember|12": {
+   "free": {
+    "11": "V: Vocal\n\"F#\"z32|\"C#\"z32|\"B\"z32|\"D#m\"z8A8f8e6A2|\nV: Ins\nA16z4A2B2A4G2F2|G16A6G6F4|D16E8F8|D8z24|\n% chorus\nV: Vocal\n\"D#m\"A8G8A8z8|\"D#m\"z12A4f4e4\"C#6\"e4A4|\"Bmaj7\"A8G8A8z8|\"Bmaj7\"z12A4f4e4e4A4|\nV: Ins\nZ4|\nV: Vocal\n\"F#\"A8G8A8z8|\"F#\"z12A4B6A2A4G4|\"C#\"G8F8G16|\"",
+    "22": "V: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z32|\nV: Ins\nA16z4A4c4d4|G16z4D2E2F2G2A2B2|A16z4A4c4d4|G16z4D2E2F2G2A2B2|\nV: Vocal\n\"F#\"z32|\"C#\"z32|\"Bmaj7\"z32|\"Bmaj7\"z8A8f8e6A2|\nV: Ins\nA16z4A4c4d4|G16z4D2E2F2G2A2B2|A8G8F8E8|D8z24|\n% chorus\nV: Vocal\n\"D#m\"A8",
+    "33": "V: Vocal\n\"F#\"z32|\"C#\"z32|\"Bmaj7\"z32|\"D#m\"z32|\nV: Ins\nA16c8A8|G16z4A2G2F2E2D2C2|D16E8C8|D32|\nV: Vocal\n\"B\"z32|\"F#\"z32|\"B\"z32|\"F#\"z32|\nV: Ins\nd16z4e4f4g4|a24f2e2d2c2|d16z4e4f4g4|a16z4b2a2g2f2e2d2|\nV: Vocal\n\"B\"z32|\"A#m\"z32|\"A#m\"z8A8f8e6A2|\nV: Ins\nd16",
+    "44": "V: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z8A8f8e6A2|\nV: Ins\nA16z4d4e4f4|e12c12G8|A32|Z|\n% chorus\nV: Vocal\n\"D#m\"A8G8A8z8|\"D#m\"z12A4f4e4\"D#m7/C#\"e4A4|\"Bmaj7\"A8G8A8z8|\"Bmaj7\"z12A4f4e4e4A4|\nV: Ins\nZ4|\nV: Vocal\n\"F#\"A8G8A8z8|\"F#\"z12A4B6A2A4G4|\"C#\"G8F8G16-|\"C#\"G1",
+    "55": "V: Vocal\n\"F#\"z32|\"C#\"z32|\"Bmaj7\"z32|\"D#m\"z32|\nV: Ins\nA16z4A2B2c6A2|G16z4G2A2B4A2G2|F16E8C8|D32|\nV: Vocal\n\"Bmaj7\"z32|\"F#\"z32|\"Bmaj7\"z32|\"F#\"z32|\nV: Ins\nD8E8F8G8|A24z8|D8E8F8G8|A32|\nV: Vocal\n\"Bmaj7\"z32|\"A#m\"z32|\"A#m\"z8A8f8e6A2|\nV: Ins\nD8E8F8G8|A32|Z|\n% chorus\nV"
+   },
+   "ins": {
+    "11": "A12d4e8c8|d12d2e2f6e6c4|d12d4e8c8|d16z4d2e2f2g2a2b2|\nV: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"F#\"z32|\"C#\"z32|\nV: Ins\na12a4g8e8|f12f2g2a6g6e4|f12f4g8a",
+    "22": "A24z4d2e2|f6e6c4d16|z8f4A4e8c8|d16z4d2e2f2g2a2b2|\nV: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z32|\nV: Ins\na12g2a2b6a6g4|a16z4d2e2f2g2a2b2",
+    "33": "A8F4A,4E8C8|D8z2A,2D2E2F6E6C4|D8F4A,4E8C8|D16z4D2E2F2G2A2B2|\nV: Vocal\n\"F#\"z32|\"C#\"z32|\"B\"z32|\"B\"z8A8f8e6A2|\nV: Ins\nA8z16A4B2A2|G24G4A2G2",
+    "44": "A16z4D2E2F2G2A2B2|A12G12E8|F16E8C8|D16z4D2E2F2G2A2B2|\nV: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z32|\nV: Ins\nA8f4A4e4A4c4A4|d16z4d2e2f2g",
+    "55": "A16z4A2c2c4d4|d16z4d2e2f2e2d2c2|d16z4A2G2G4F4|F16z4D2E2F2G2A2B2|\nV: Vocal\n\"D#m\"z32|\"Bmaj7\"z32|\"D#m\"z32|\"Bmaj7\"z8A8f8e6A2|\nV: Ins\nA16z4A2c2"
+   }
+  },
+  "Iron Ghost|34": {
+   "free": {
+    "11": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nd6cd|e4f4|e6de|f4g4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z4d2f2|\nV: Ins\na6ga|b4a2g2|a2g2f2e2|d2c2z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"Bb\"f2g2g4|\"Gm\"g2g2g2a2|\"Gm\"gff2d4|\nV:",
+    "22": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nD,2D,2D,D,D,D,|D,D,D,D,F,D,F,E,|D,2D,2D,D,D,D,|D,D,D,D,F,D,F,E,|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Bb\"z8|\"Gm\"z4d2f2|\nV: Ins\nD,2D,2D,D,D,D,|D,D,D,D,F,D,F,E,|B,4B,B,B,B,|G,4z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n",
+    "33": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nA,4D2A2|A6GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nD4A2A2|A6GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD4A2A2|A6GA|B4A2G2|F2E2D4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\n",
+    "44": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD4A4-|A4z2G2|B4A2G2|F2E2D4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nA8-|A4z2G2|B4A2G2|F2E2D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD4A4-|A4z2G2|B4A2G2|F2E2D4|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV",
+    "55": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nD,8-|D,8|Z2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nd4a4-|a4z2g2|b4a2g2|f2e2d4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\na8-|a4z2g2|b4a2g2|f2e2z4|\n% chorus\nV: Vocal\n\"Dm\"a3dd2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff"
+   },
+   "ins": {
+    "11": "d4a4-|a4z2g2|b4a2g2|f2e2d4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nd4a4-|a4z2g2|b4a2g2|f2e2z4|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g",
+    "22": "D2A2D2A2|D2A2D2A2|BAG2F2E2|D2C2A,2G,2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"C\"z8|\"C\"z8|\nV: Ins\nD2A2D2A2|D2A2D2A2|BAG2F2E2|D2C2A,2G,2|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"",
+    "33": "D8|E8|F8|G4B4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins\nA8-|A8|Z2|\n% chorus\nV: Vocal\n\"Dm\"a4d2dd|\"Dm\"f2g2g4|\"C\"g2g2g2ga|\"C\"gff2d4|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"a3dd2dd|\"B",
+    "44": "A,6G,A,|B,4A,2G,2|A,8-|A,8|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nD4A4-|A4z2G2|B4A2G2|F2E2D4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z4d2f2|\nV: Ins",
+    "55": "d6cd|e4f4|e6de|f4g4|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\na6ga|b4a2g2|f2e2d2c2|A2G2F2E2|\nV: Vocal\n\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\"Gm\"z8|\nV: Ins\nd6cd|e4f4|"
+   }
+  },
+  "Iron Ghost|4": {
+   "free": {
+    "11": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2a2a3d|\"Dm\"d2b2a4|\"Dm\"z8|\"Dm\"z6zd|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d2a2a3d|\"Dm\"d",
+    "22": "V: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2a2a3d|\"Dm\"d2a2a4|\"Dm\"z8|\"Dm\"z6zd|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"d2b2b3d|\"Bb\"d2b4a2-|\"Bb\"a2z6|\"Bb\"z6d2|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d2a2a2d2|\"Dm\"d2a2a4|\"Dm\"z8|\"Dm\"z6zd|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"d2b2b2d2|\"Bb\"d2b4a2-|\"Bb\"a4z4|\"Bb\"z6zd|\nV: Ins\n",
+    "33": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\nV: Ins\nf2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Gm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d4a4|\"Dm\"a3gf2e2|\"Dm\"d8|\"Dm\"z6zd|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"d2a2a4-|\"Bb\"a2g",
+    "44": "V: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|d2A2F2E2|G2F2E2C2|D2A2F2E2|\nV: Vocal\n\"Dm\"z8|\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\nV: Ins\nB2A2FEDC|D2A2F2E2|G2F2E2C2|D4E4|\nV: Vocal\n\"Gm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nF4G4|d2a2f2e2|g2f2e2c2|d2a2f2e2|\nV: Vocal\n\"Dm\"",
+    "55": "V: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2d2d2e2|\"Dm\"f2e2d4|\"Dm\"z8|\"Dm\"z6zd|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"d2d2d2e2|\"Dm\"f2e4d2-|\"Dm\"d2z6|\"Dm\"z6d2|\nV: Ins\nZ4|\nV: Vocal\n\"Bb\"dd2d3e2|\"Bb\"f2e2d3d|\"Gm\"d2dd3e2|\"Gm\"f2e2d3c|\nV: Ins\nZ4|\nV: Vocal\n\"Dm\"cd2d3zc|\"Dm\"c2dd3zc|\"Dm\"cd3d3c|\"Dm\"c2dd"
+   },
+   "ins": {
+    "11": "f2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d4a4|\"D",
+    "22": "f2e2d4|d2d2a2da|b2a2g2fe|d2d2a2da|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Bb\"z8|\nV: Ins\nb2a2g2fe|d2d2a2da|b2a2g2fe|d2d2f2ef|\nV: Vocal\n\"C\"z8|\nV: Ins\ng2fgefec|\n% verse\nV: Vocal",
+    "33": "f2e2d4|d4a4-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"z4d2a",
+    "44": "f2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\"Dm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2a2a3d|\"",
+    "55": "f2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Dm\"z8|\"Bb\"z8|\"Bb\"z8|\"Gm\"z8|\nV: Ins\nf2e2d4|a8-|a4z2g2|b4a2g2|\nV: Vocal\n\"Gm\"z8|\nV: Ins\nf2e2d4|\n% verse\nV: Vocal\n\"Dm\"d2a2a3g|\""
+   }
+  }
+ }
+}

@@ -1,7 +1,13 @@
 // A melody edit asked for from the Song map: the map stays on screen while the
 // studio sings, so this is what it shows in place of the Create screen's stages.
 
+import { EDIT_PHASES } from '@engine/comfy/graphBuilder';
 import { HARVEST_PHASE, type JobProgress } from '@engine/index';
+
+/** New bars asked for: the studio writes them, in the manner of the part, to follow this phrase of the song. */
+export interface MorePhrase {
+  phrase: number;
+}
 
 export interface MapEditState {
   /** The song whose notes were moved. */
@@ -16,6 +22,8 @@ export interface MapEditState {
   taken: boolean;
   /** The plan that was sent: the map shows these notes again when someone leaves it and comes back. */
   abc: string;
+  /** Set when the edit makes the song longer: the phrase the new bars follow. */
+  longer?: MorePhrase;
   /** When it was asked for (or asked for again), in milliseconds. */
   since: number;
   /** The studio's latest word on it. */
@@ -51,11 +59,16 @@ export interface MapEditStage {
   fraction?: number;
 }
 
-/** What the studio is doing, from the phase it last reported (see NODE_PHASES and EDIT_PHASES). */
-export function mapEditStage(progress: JobProgress | undefined): MapEditStage {
+/**
+ * What the studio is doing, from the phase it last reported (see NODE_PHASES
+ * and EDIT_PHASES). `longer`: the edit adds bars, where the other kind has
+ * notes sung again.
+ */
+export function mapEditStage(progress: JobProgress | undefined, longer = false): MapEditStage {
   const phase = progress?.phase ?? '';
-  if (phase.startsWith('Composing (trying')) return { label: 'Trying a few takes of your notes' };
-  if (phase.startsWith('Composing')) return { label: 'Singing the take that fits best' };
+  if (phase === EDIT_PHASES.writing) return { label: 'Writing new bars for this part' };
+  if (phase.startsWith('Composing (trying')) return { label: longer ? 'Trying a few takes of the new bars' : 'Trying a few takes of your notes' };
+  if (phase.startsWith('Composing')) return { label: longer ? 'Performing the take that joins best' : 'Singing the take that fits best' };
   if (phase.startsWith('Rendering')) {
     const known = progress?.stepNode === 'sample' && progress.stepValue != null && !!progress.stepMax;
     return { label: 'Recording the new version', fraction: known ? Math.min(1, progress!.stepValue! / progress!.stepMax!) : undefined };

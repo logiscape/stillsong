@@ -16,6 +16,19 @@ describe('what the Song map says while new notes are sung', () => {
     for (const phase of [NODE_PHASES.decode, NODE_PHASES.save, HARVEST_PHASE]) expect(mapEditStage(at(phase)).label).toBe('Finishing');
   });
 
+  it('speaks of bars, not notes, when the song is being made longer', () => {
+    expect(mapEditStage(undefined, true).label).toBe('Getting the studio ready');
+    expect(mapEditStage(at(EDIT_PHASES.writing), true).label).toBe('Writing new bars for this part');
+    expect(mapEditStage(at(EDIT_PHASES.extending), true).label).toBe('Trying a few takes of the new bars');
+    expect(mapEditStage(at(NODE_PHASES.arrange), true).label).toBe('Performing the take that joins best');
+    expect(mapEditStage(at(NODE_PHASES.perform), true).label).toBe('Performing the take that joins best');
+    expect(mapEditStage(at(NODE_PHASES.sample), true).label).toBe('Recording the new version');
+    expect(mapEditStage(at(HARVEST_PHASE), true).label).toBe('Finishing');
+    for (const phase of [...Object.values(NODE_PHASES), ...Object.values(EDIT_PHASES), HARVEST_PHASE, '']) {
+      expect(mapEditStage(at(phase), true).label).not.toMatch(/render|GPU|model|ComfyUI|prompt|generat|notes|sing/i);
+    }
+  });
+
   it('shows how far the recording has got, and only then', () => {
     expect(mapEditStage(at(NODE_PHASES.sample, { stepNode: 'sample', stepValue: 8, stepMax: 32 })).fraction).toBe(0.25);
     expect(mapEditStage(at(NODE_PHASES.sample)).fraction).toBeUndefined();

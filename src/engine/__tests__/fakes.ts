@@ -66,6 +66,10 @@ export interface FakeWorld {
    * to these. Default: every take follows the new notes and hands back well.
    */
   takeScores: { fit: number; seam: number }[];
+  /** Set to make every score series claim this many frames (a studio that answers with the wrong take). */
+  takeSeriesFrames?: number;
+  /** What the plan writer writes when asked to go on from `before` (a writing prompt), attempt by attempt. Nothing, unless a test says. */
+  writtenBars: (before: string, attempt: number) => string;
 }
 
 /** A flat series of `frames` values with a -2 dip over [from, to). */
@@ -88,6 +92,7 @@ export function fakeHttp(): FakeWorld {
     submittedGraphs: [],
     alignSeries: [dipSeries(1060, 500, 550)],
     takeScores: [{ fit: 50, seam: -40 }],
+    writtenBars: () => '',
     http: null!,
   };
   let alignCalls = 0;
@@ -119,27 +124,36 @@ export function fakeHttp(): FakeWorld {
         if (graph?.align) {
           // An alignment prompt makes no audio: only the series.
           outputs.align = { text: [alignText.get(id) ?? ''] };
+        } else if (graph?.write_0) {
+          // A writing prompt makes no audio: each node's text is what it wrote.
+          for (const [node, { class_type, inputs }] of Object.entries(graph)) {
+            if (class_type === 'Stillsong2ContinuePlan') outputs[node] = { text: [w.writtenBars(String(inputs.abc), Number(node.split('_')[1]))] };
+          }
         } else if (graph?.score_base) {
           // A takes prompt makes no audio either: one series per scoring node.
-          const frames = 1060;
-          const series = (fill: (logp: number[]) => void) => {
+          // The take is 1060 frames; laid out anew with a gap (an extension), it is longer by the gap.
+          const whole = 1060;
+          const opened = /\+(\d+)/.exec(String(graph.arrange?.inputs.layout ?? ''));
+          const longer = whole + (opened ? Number(opened[1]) : 0);
+          const series = (frames: number, fill: (logp: number[]) => void) => {
             const logp = new Array<number>(frames).fill(0);
             fill(logp);
-            return { text: [JSON.stringify({ frames, logp })] };
+            return { text: [JSON.stringify({ frames: w.takeSeriesFrames ?? frames, logp })] };
           };
           for (const [node, { class_type, inputs }] of Object.entries(graph)) {
             if (class_type !== 'Stillsong2Score') continue;
             const take = /^score_new_(\d+)$/.exec(node);
             if (!take) {
-              outputs[node] = series(() => {});
+              // The source take under its own plan (whole), or a new take under the original plan.
+              outputs[node] = series((inputs.tokens as [string, number])[0] === 'source' ? whole : longer, () => {});
               continue;
             }
             const sung = graph[(inputs.tokens as [string, number])[0]];
             const [start, end] = String(sung.inputs.redo).split(',')[0].split('-').map(Number);
             const score = w.takeScores[Math.min(Number(take[1]), w.takeScores.length - 1)];
-            outputs[node] = series((logp) => {
+            outputs[node] = series(longer, (logp) => {
               logp[start] = score.fit;
-              if (end < frames) logp[end] = score.seam;
+              if (end < longer) logp[end] = score.seam;
             });
           }
         } else {

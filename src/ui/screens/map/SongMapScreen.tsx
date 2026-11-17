@@ -10,10 +10,11 @@ import { gridTiming, readBarGrid } from '@engine/domain/barGrid';
 import { changedBars, melodyWindows } from '@engine/domain/melodyEdit';
 import { stepNote, type NoteRef } from '@engine/domain/melodyPlan';
 import { buildSongMap, evenTiming, musicBoxEvents, phraseAt, recordingTiming, type SongMap } from '@engine/domain/songMap';
-import { mapEditStage, stopReady, STOP_GUARD_MS } from '@state/mapEdit';
+import { mapEditStage, stopReady, STOP_GUARD_MS, type MorePhrase } from '@state/mapEdit';
+import { canRepeatPhrase, roomForBars } from '@engine/domain/extension';
 import { canKeepRest } from '@state/remix';
 import {
-  clearMapArrival, dropMapEdit, locateSongBars, navigate, pausePlayback, playSongFrom, playbackTime, retryMapEdit, seek, singNewNotes,
+  clearMapArrival, dropMapEdit, locateSongBars, navigate, pausePlayback, playSongFrom, playbackTime, playLonger, retryMapEdit, seek, singNewNotes,
   thumbSrc, useAppState,
 } from '@state/store';
 import { Button } from '@ui/ds/Button';
@@ -90,10 +91,15 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
   // of the plan, the last one is on show, and undo drops it. The map below is
   // the draft's; `original` is the song as recorded.
   // Someone who asked for their notes to be sung and left the map finds them here on the way back.
-  const [drafts, setDrafts] = useState<string[]>(() => (s.mapEdit?.sourceId === song.id && s.mapEdit.abc !== song.planAbc ? [s.mapEdit.abc] : []));
+  const [drafts, setDrafts] = useState<string[]>(() => (s.mapEdit?.sourceId === song.id && !s.mapEdit.longer && s.mapEdit.abc !== song.planAbc ? [s.mapEdit.abc] : []));
   const draft = drafts.length ? drafts[drafts.length - 1] : null;
   const map = useMemo(() => (draft ? buildSongMap(draft, song.spec.lyrics) ?? original : original), [draft, original, song.spec.lyrics]);
   const [picked, setPicked] = useState<NoteRef | null>(null);
+  // New bars asked for after a phrase (the song made longer), not yet written
+  // or performed. Not a draft of the plan: the studio writes them, and the map
+  // stays the song as recorded until the longer version exists. One kind of
+  // change at a time, notes or length.
+  const [more, setMore] = useState<MorePhrase | null>(() => (s.mapEdit?.sourceId === song.id ? s.mapEdit.longer ?? null : null));
   const loaded = s.playback?.songId === song.id;
   const recordingPlaying = loaded && s.playback!.isPlaying;
   const volume = s.playback?.volume ?? 0.8;
@@ -263,7 +269,7 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
   const changed = useMemo(() => (draft ? changedBars(original, map) ?? [] : []), [draft, original, map]);
   const frames = Math.round(recordingTotal * 25);
   const windows = useMemo(() => (grid && changed.length ? melodyWindows(original, grid, changed, frames) : []), [grid, changed, original, frames]);
-  const editedPhrases = useMemo(() => new Set(changed.map((bar) => phraseAt(original, bar))), [changed, original]);
+  const editedPhrases = useMemo(() => new Set(more ? [more.phrase] : changed.map((bar) => phraseAt(original, bar))), [changed, original, more]);
   // A song's notes can be moved once the rest of its recording can be kept (it
   // has a take) and its bars have been found in the recording.
   const editable = canKeepRest(song) && !!grid;
@@ -305,7 +311,7 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
   const asked = s.mapEdit?.sourceId === song.id ? s.mapEdit : null;
   const singing = !!asked && !asked.error;
   const busy = !!s.mapEdit && !s.mapEdit.error; // one edit at a time, whichever song it is for
-  const stage = mapEditStage(asked?.progress);
+  const stage = mapEditStage(asked?.progress, !!asked?.longer);
   // Stop sits where "Sing the new notes" was: it waits out a double-click, and for the studio to have taken the
   // request. Once the new version is being copied into the library there is nothing left to stop.
   const [stopArmed, setStopArmed] = useState(false);
@@ -321,6 +327,31 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
     if (!draft || !windows.length || busy) return;
     void singNewNotes(song, draft);
   };
+
+  // ---- new bars after a phrase
+  const planPhrases = useMemo(() => original.phrases.map((p) => p.phrase), [original]);
+  /**
+   * The most seconds of new bars that can follow a phrase (0: none). They come
+   * in phrases as long as that one, as many as fit in what the studio adds in
+   * one go, the recording holds and the length limit leaves.
+   */
+  const roomFor = useCallback((phrase: number): number => {
+    const p = original.phrases[phrase];
+    if (!editable || !grid || !p || !canRepeatPhrase(planPhrases, phrase)) return 0;
+    const bars = Math.floor(roomForBars(original, grid, phrase, frames) / p.phrase.bars) * p.phrase.bars;
+    return bars * original.ctx.secPerBar;
+  }, [editable, original, planPhrases, grid, frames]);
+  const moreRoom = more ? roomFor(more.phrase) : 0;
+  const askMore = () => {
+    if (asked?.error) void dropMapEdit(); // as with notes: what failed was asked for as it was then
+    setPicked(null);
+    setMore({ phrase: now });
+  };
+  const perform = () => {
+    if (!more || !moreRoom || busy) return;
+    void playLonger(song, more);
+  };
+  const longerAsk = !!(asked?.longer ?? more);
 
   // Arriving at a version this map just had sung: the playhead waits a few
   // seconds before the bars that are new. Nothing plays until the person
@@ -390,10 +421,24 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
           onStep: step,
           canRaise: !!picked && stepNote(plan, picked, 1) !== null,
           canLower: !!picked && stepNote(plan, picked, -1) !== null,
+          ...(more && !singing ? { locked: true, picked: null, lockedNote: 'New bars are set to be added. Have them performed, or undo that, before moving notes: one change at a time.' } : {}),
+        } : undefined}
+        more={editable && canRepeatPhrase(planPhrases, now) ? {
+          asked: more?.phrase === now,
+          seconds: roomFor(now),
+          onAsk: askMore,
+          locked: singing || drafts.length > 0 || (!!more && more.phrase !== now) || roomFor(now) === 0,
+          note: singing
+            ? asked?.longer ? 'The studio is at work on the new bars.' : 'The studio is singing your notes.'
+            : drafts.length > 0
+              ? 'Notes have been moved. Have them sung, or undo them, before making the song longer: one change at a time.'
+              : more && more.phrase !== now
+                ? 'New bars are set to follow another phrase. One place at a time.'
+                : roomFor(now) === 0 ? 'There is no room for new bars here: the song is as long as the studio can make it, or the recording stops before here.' : undefined,
         } : undefined}
       />
 
-      {(changed.length > 0 || asked) && (
+      {(changed.length > 0 || more || asked) && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px 20px',
           padding: '14px 18px', borderRadius: 'var(--radius-md)', background: 'var(--brass-wash)', border: '1px solid var(--brass-line)',
@@ -403,10 +448,33 @@ function MapView({ song, map: original }: { song: Song; map: SongMap }): React.R
               <div style={{ flex: '1 1 320px', minWidth: 0, maxWidth: '62ch' }}>
                 <ProgressBar label={stage.label} value={stage.fraction} indeterminate={stage.fraction === undefined} />
                 <div style={{ font: 'var(--ui-sm)', color: 'var(--text-body)', marginTop: 10 }}>
-                  The map will turn to the new version when it is ready, at the bars that were sung again.
+                  {longerAsk
+                    ? 'The map will turn to the longer version when it is ready, at the new bars.'
+                    : 'The map will turn to the new version when it is ready, at the bars that were sung again.'}
                 </div>
               </div>
               <Button variant="ghost" disabled={!stopArmed} onClick={() => void dropMapEdit()}>Stop</Button>
+            </>
+          ) : longerAsk ? (
+            <>
+              <div style={{ minWidth: 0, maxWidth: '62ch' }}>
+                <div style={{ font: '500 14.5px/1.4 var(--font-ui)', color: 'var(--ink-1)' }}>
+                  {asked?.error ? 'The new bars were not added' : `New bars for the ${original.sections[original.phrases[more?.phrase ?? 0].section]?.name.toLowerCase() || 'song'}`}
+                </div>
+                <div style={{ font: 'var(--ui-sm)', color: 'var(--text-body)', marginTop: 4 }}>
+                  {asked?.error
+                    ? asked.error
+                    : moreRoom
+                      ? `The studio writes new bars in the manner of this part, to follow the phrase you chose, and performs them: up to ${Math.round(moreRoom)} seconds more, as a new version. The bar before them is performed again so that they join; everything else stays exactly as it is.`
+                      : 'There is no room for new bars in this recording.'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                <Button variant="ghost" icon="undo-2" onClick={() => { if (asked) void dropMapEdit(); setMore(null); }}>Undo</Button>
+                {asked?.error && asked.songId
+                  ? <Button variant="primary" onClick={() => void retryMapEdit()}>Try again</Button>
+                  : <Button variant="primary" disabled={!more || !moreRoom || busy} onClick={perform}>Write and perform them</Button>}
+              </div>
             </>
           ) : (
             <>

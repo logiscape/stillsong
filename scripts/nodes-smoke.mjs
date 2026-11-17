@@ -20,6 +20,9 @@
 //   T6  scoring a take under two sheets reproduces the alignment series
 //   T7  a take laid out anew: frames taken out, and a gap opened and sung;
 //       a gap that was never sung is refused, and so is a layout too long to perform
+//   T8  writing on from a plan (Stillsong2ContinuePlan): from an empty plan it
+//       writes what the core plan node writes for the same seed, and from the
+//       middle of the song's plan it writes more bars in the plan's own form
 //
 // Run it after any change to the package and as part of the ComfyUI bump ritual.
 
@@ -31,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const urlArg = process.argv.indexOf('--url');
 const URL_ = urlArg > 0 ? process.argv[urlArg + 1] : (process.env.STILLSONG2_COMFY_URL ?? 'http://127.0.0.1:8000');
-const NODES = ['Stillsong2Perform', 'Stillsong2Resing', 'Stillsong2ArrangeTake', 'Stillsong2Score', 'Stillsong2LoadTake', 'Stillsong2HoldLatent', 'Stillsong2RestoreLatent', 'Stillsong2Align', 'Stillsong2SaveTake'];
+const NODES = ['Stillsong2Perform', 'Stillsong2Resing', 'Stillsong2ArrangeTake', 'Stillsong2Score', 'Stillsong2ContinuePlan', 'Stillsong2LoadTake', 'Stillsong2HoldLatent', 'Stillsong2RestoreLatent', 'Stillsong2Align', 'Stillsong2SaveTake'];
 const PREFIX = 'stillsong2-smoke';
 
 const song = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples', 'examples.json'), 'utf8')).songs
@@ -412,6 +415,28 @@ for (let c = 0; latentAround && c < 64; c++) {
 check('the latent before and after the gap is bit-equal', latentAround);
 check('the gap holds new music', gapFilled && new Set(gapTake.codes.subarray(GAP[0], GAP[1])).size > 10, `${new Set(gapTake.codes.subarray(GAP[0], GAP[1])).size} different tokens in ${added} frames`);
 check('it was performed to audio', gapMp3.length > 100000, `${gap.seconds.toFixed(0)} s for the whole pass`);
+
+console.log('T8 writing on from a plan');
+// The plan node's own sampling settings, and a budget small enough to compare whole.
+const writer = { clip: ['ckpt', 1], style: spec.caption, lyrics: spec.lyrics, seed: 4321, mode: 'full' };
+const writing = { temperature: 0.7, top_p: 0.9, top_k: 30, repetition_penalty: 1.005, penalty_window: 100 };
+// The plan up to the end of its first played phrase (line 4 of a phrase is the instrument's).
+const planLines = song.abc.split('\n');
+const firstPart = planLines.findIndex((line) => line.startsWith('%'));
+const firstIns = planLines.findIndex((line, i) => i > firstPart && /^V:\s*Ins/.test(line));
+const soFar = `${planLines.slice(0, firstIns + 2).join('\n')}\n`;
+const wrote = await run({
+  ckpt,
+  core: { class_type: 'YuE2GenerateABC', inputs: { ...writer, max_abc_tokens: 120, ...writing } },
+  core_out: { class_type: 'PreviewAny', inputs: { source: ['core', 0] } },
+  from_start: { class_type: 'Stillsong2ContinuePlan', inputs: { ...writer, abc: '', max_tokens: 120, ...writing } },
+  onward: { class_type: 'Stillsong2ContinuePlan', inputs: { ...writer, abc: soFar, max_tokens: 120, ...writing } },
+});
+const coreText = wrote.outputs.core_out.text[0];
+const fromStart = wrote.outputs.from_start.text[0];
+const onward = wrote.outputs.onward.text[0];
+check('from an empty plan it writes what the plan node writes', fromStart.length > 40 && fromStart === coreText, `${fromStart.length} characters`);
+check('from the middle of the plan it writes on in the plan\'s form', firstPart >= 0 && firstIns > firstPart && /^V:\s*Vocal\n[^\n]*\|\nV:\s*Ins\n[^\n]*\|/m.test(onward) && onward !== fromStart, `${JSON.stringify(onward.slice(0, 60))}; three plans ${wrote.seconds.toFixed(1)} s`);
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
