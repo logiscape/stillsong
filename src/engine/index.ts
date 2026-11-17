@@ -15,6 +15,7 @@ import type { HardwareInfo, RuntimeInstallState } from './ports';
 import { ALIGN_OUT, buildAlignGraph, buildEditGraph, buildGraph, EDIT_PHASES, PLAN_OUT, SECONDS_OUT, type EditSource } from './comfy/graphBuilder';
 import { TAKE_NODE, type ApiGraph } from './comfy/nodes';
 import { editWindows, mergeWindows, parseAlignSeries } from './domain/editWindows';
+import type { BarGrid } from './domain/barGrid';
 import { ComfyClient, type HistoryEntry } from './comfy/client';
 import { ProgressTracker, type ProgressEvent } from './comfy/events';
 import { SongRepo, type ComposedLength } from './repo/songs';
@@ -371,6 +372,17 @@ export class Engine {
 
   async revealSong(song: Song): Promise<void> {
     if (song.outputPath) await this.ports.files.reveal(song.outputPath);
+  }
+
+  /** A finished song's recording as base64 MP3 bytes, for the Song map to find its bars in; null when there is none. */
+  async songAudio(song: Song): Promise<string | null> {
+    if (!song.outputPath || !(await this.ports.files.exists(song.outputPath))) return null;
+    return this.ports.files.readBase64(song.outputPath);
+  }
+
+  /** Stores where the plan's bars fall in a song's recording. */
+  async saveBarGrid(songId: string, grid: BarGrid): Promise<void> {
+    await this.songs.setBarGrid(songId, JSON.stringify(grid));
   }
 
   /** See `takeNodes`: asked once the studio is up, and again until the nodes are seen. */

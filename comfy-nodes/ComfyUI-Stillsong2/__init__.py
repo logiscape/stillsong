@@ -1,7 +1,8 @@
 # ComfyUI-Stillsong2: Stillsong 2's first-party nodes for YuE2. They keep a
-# render's take (its music tokens and final latent), find where a take sings
-# given words, and perform a take again with only some frame windows re-sung
-# while everything else is held. See README.md for provenance and
+# render's take (its music tokens and final latent), score a take against any
+# lyric sheet or melody plan, lay a take out anew with gaps for new music, and
+# perform a take again with only some frame windows re-sung while everything
+# else is held. See README.md for provenance and
 # stillsong2_ar.py for the mechanism. Derived from ComfyUI (GPL-3.0); this
 # package is GPL-3.0.
 #
@@ -18,10 +19,10 @@ import torch
 
 import comfy.text_encoders.yue2 as _yue2
 import folder_paths
-from comfy.text_encoders.yue2 import CODEC_OFFSET, FRAMES_PER_SECOND, MUSIC_END
+from comfy.text_encoders.yue2 import CODEC_OFFSET, CONTEXT, FRAMES_PER_SECOND
 
 from .stillsong2_ar import PINNED_YUE2_SHA256, stillsong_encode
-from .take_format import LATENT_CHANNELS, SUFFIX, inside, load_take, parse_ranges, save_take, window_mask
+from .take_format import LATENT_CHANNELS, SUFFIX, inside, load_take, parse_layout, parse_ranges, save_take, window_mask
 
 
 def _guard_pinned_yue2():
@@ -58,7 +59,50 @@ def _install_encode_patch():
 
 _install_encode_patch()
 
-TOKENS = "STILLSONG2_TOKENS"  # {"ids": [YuE2 token id per frame]}
+# {"ids": [YuE2 token id per frame]}; a take laid out anew also carries
+# "gaps": [(start, stop), ...], the frames that hold no music yet.
+TOKENS = "STILLSONG2_TOKENS"
+
+_PROMPT = {
+    "clip": ("CLIP",),
+    "style": ("STRING", {"multiline": True, "dynamicPrompts": True}),
+    "lyrics": ("STRING", {"multiline": True, "dynamicPrompts": True}),
+    "abc": ("STRING", {"multiline": True, "default": ""}),
+    "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": True}),
+    "mode": (["full", "melody"],),
+    "max_duration": ("FLOAT", {"default": 360.0, "min": 0.04, "max": 900.0, "step": 0.04}),
+    "temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
+    "top_p": ("FLOAT", {"default": 0.95, "min": 0.01, "max": 1.0, "step": 0.01}),
+    "top_k": ("INT", {"default": 100, "min": 1, "max": 32768}),
+    "repetition_penalty": ("FLOAT", {"default": 1.2, "min": 0.01, "max": 10.0, "step": 0.01}),
+}
+
+
+def _tokenize(clip, style, lyrics, abc, seed, mode, max_duration, temperature, top_p, top_k, repetition_penalty):
+    # As YuE2GenerateMusic: no plan means "off", and the guidance default follows the mode.
+    if not abc.strip():
+        mode = "off"
+    cfg_scale = 1.01 if mode == "off" else 1.0
+    return clip.tokenize(style, lyrics=lyrics, cot=mode, seed=seed, abc=abc,
+                         max_tokens=max(1, round(max_duration * FRAMES_PER_SECOND)),
+                         temperature=temperature, top_p=top_p, top_k=top_k,
+                         repetition_penalty=repetition_penalty, cfg_scale=cfg_scale)
+
+
+def _gaps(tokens):
+    return [tuple(gap) for gap in tokens.get("gaps") or []]
+
+
+def _require_whole(tokens, what):
+    if _gaps(tokens):
+        raise ValueError(f"{what} needs a whole take; this one has gaps that were never sung.")
+
+
+def _require_sung(tokens, windows):
+    """Every gap of a take laid out anew must lie inside a redo window."""
+    for start, stop in _gaps(tokens):
+        if not any(a <= start and stop <= b for a, b in windows):
+            raise ValueError(f"The gap at frames {start}-{stop} holds no music: put it inside a redo window.")
 
 
 def _audio_latent(samples):
@@ -88,22 +132,10 @@ class Stillsong2Perform:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": {
-                "clip": ("CLIP",),
-                "style": ("STRING", {"multiline": True, "dynamicPrompts": True}),
-                "lyrics": ("STRING", {"multiline": True, "dynamicPrompts": True}),
-                "abc": ("STRING", {"multiline": True, "default": ""}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "control_after_generate": True}),
-                "mode": (["full", "melody"],),
-                "max_duration": ("FLOAT", {"default": 360.0, "min": 0.04, "max": 900.0, "step": 0.04}),
-                "temperature": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
-                "top_p": ("FLOAT", {"default": 0.95, "min": 0.01, "max": 1.0, "step": 0.01}),
-                "top_k": ("INT", {"default": 100, "min": 1, "max": 32768}),
-                "repetition_penalty": ("FLOAT", {"default": 1.2, "min": 0.01, "max": 10.0, "step": 0.01}),
-            },
+            "required": dict(_PROMPT),
             "optional": {
-                "tokens": (TOKENS, {"tooltip": "A take to perform again; needs redo."}),
-                "redo": ("STRING", {"default": "", "tooltip": "Frame windows to sing anew, e.g. 583-662,2264-2338."}),
+                "tokens": (TOKENS, {"tooltip": "A take to perform again."}),
+                "redo": ("STRING", {"default": "", "tooltip": "Frame windows to sing anew, e.g. 583-662,2264-2338. Empty: the take as it is."}),
             },
         }
 
@@ -114,26 +146,15 @@ class Stillsong2Perform:
 
     def perform(self, clip, style, lyrics, abc, seed, mode, max_duration, temperature, top_p, top_k, repetition_penalty,
                 tokens=None, redo=""):
-        # As YuE2GenerateMusic: no plan means "off", and the guidance default follows the mode.
-        if not abc.strip():
-            mode = "off"
-        cfg_scale = 1.01 if mode == "off" else 1.0
-        encoded = clip.tokenize(style, lyrics=lyrics, cot=mode, seed=seed, abc=abc,
-                                max_tokens=max(1, round(max_duration * FRAMES_PER_SECOND)),
-                                temperature=temperature, top_p=top_p, top_k=top_k,
-                                repetition_penalty=repetition_penalty, cfg_scale=cfg_scale)
+        encoded = _tokenize(clip, style, lyrics, abc, seed, mode, max_duration, temperature, top_p, top_k, repetition_penalty)
         opts = {}
         frames = None
         if tokens is not None:
-            ids = tokens["ids"]
+            ids = list(tokens["ids"])
             frames = len(ids)
             windows = parse_ranges(redo, frames)
-            if not windows:
-                raise ValueError("Performing a take again needs at least one redo window.")
-            # One entry per frame plus the end token, so the take ends where it did.
-            forced = torch.tensor(list(ids) + [MUSIC_END], dtype=torch.long)
-            forced[:frames][window_mask(windows, frames)] = -1
-            opts["forced"] = forced
+            _require_sung(tokens, windows)
+            opts = {"take": ids, "windows": windows}
         encoded["stillsong"] = opts
         conditioning = clip.encode_from_tokens_scheduled(encoded)
         semantic = None
@@ -145,6 +166,129 @@ class Stillsong2Perform:
             raise RuntimeError(f"The take changed length ({frames} -> {len(semantic)} frames).")
         seconds = conditioning[0][1]["yue2_frames"] / FRAMES_PER_SECOND
         return (conditioning, seconds, {"ids": list(semantic)})
+
+
+class Stillsong2Resing:
+    """Sings the `redo` windows of a take anew and returns its tokens, without
+    building the acoustic conditioning. This is the quick part of performing a
+    take again (about a second for a window of a few bars): try several seeds,
+    score what they sang, and hand the chosen tokens to Stillsong2Perform with
+    an empty `redo` to perform them in full."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                **_PROMPT,
+                "tokens": (TOKENS,),
+                "redo": ("STRING", {"default": "", "tooltip": "Frame windows to sing anew, e.g. 583-662,2264-2338."}),
+            }
+        }
+
+    RETURN_TYPES = (TOKENS,)
+    RETURN_NAMES = ("tokens",)
+    FUNCTION = "resing"
+    CATEGORY = "conditioning/stillsong2"
+
+    def resing(self, clip, style, lyrics, abc, seed, mode, max_duration, temperature, top_p, top_k, repetition_penalty, tokens, redo):
+        encoded = _tokenize(clip, style, lyrics, abc, seed, mode, max_duration, temperature, top_p, top_k, repetition_penalty)
+        ids = list(tokens["ids"])
+        windows = parse_ranges(redo, len(ids))
+        if not windows:
+            raise ValueError("Singing a take again needs at least one redo window.")
+        _require_sung(tokens, windows)
+        encoded["stillsong"] = {"take": ids, "windows": windows, "condition": False}
+        sung = clip.encode_from_tokens(encoded, return_dict=True)["stillsong_semantic"]
+        if len(sung) != len(ids):
+            raise RuntimeError(f"The take changed length ({len(ids)} -> {len(sung)} frames).")
+        return ({"ids": list(sung)},)
+
+
+class Stillsong2ArrangeTake:
+    """Lays a take out anew: spans of it kept, in the order given, with gaps of
+    new frames between them. `layout` such as `0-2920,+340,2920-7694` opens 340
+    new frames at frame 2920; `0-2000,2800-7694` takes frames 2000-2800 out.
+    The gaps hold no music until a redo window covering them is sung; the other
+    nodes refuse a take whose gaps were never sung."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tokens": (TOKENS,),
+                "samples": ("LATENT",),
+                "layout": ("STRING", {"default": "", "tooltip": "Spans to keep (start-end) and gaps to open (+frames), e.g. 0-2920,+340,2920-7694."}),
+            }
+        }
+
+    RETURN_TYPES = (TOKENS, "LATENT")
+    RETURN_NAMES = ("tokens", "latent")
+    FUNCTION = "arrange"
+    CATEGORY = "latent/stillsong2"
+
+    def arrange(self, tokens, samples, layout):
+        _require_whole(tokens, "Laying a take out anew")
+        ids = list(tokens["ids"])
+        latent = samples["samples"]
+        if latent.dim() != 3 or latent.shape[0] != 1 or latent.shape[1] != LATENT_CHANNELS or latent.shape[-1] != len(ids):
+            raise ValueError("Expected the take's own latent [1, 64, frames].")
+        parts = parse_layout(layout, len(ids))
+        # Counted before anything is built: a layout can name a gap, or repeat a
+        # span, far past what could ever be performed (prompt and take share the context).
+        total = sum(part[1] - part[0] if isinstance(part, tuple) else part for part in parts)
+        if total > CONTEXT:
+            raise ValueError(f"This layout makes a take of {total} frames; the studio can hold {CONTEXT} at most.")
+        out, pieces, gaps = [], [], []
+        for part in parts:
+            if isinstance(part, tuple):
+                out += ids[part[0]:part[1]]
+                pieces.append(latent[..., part[0]:part[1]])
+            else:
+                gaps.append((len(out), len(out) + part))
+                out += [CODEC_OFFSET] * part
+                pieces.append(torch.zeros((1, LATENT_CHANNELS, part), device=latent.device, dtype=latent.dtype))
+        return ({"ids": out, "gaps": gaps}, _audio_latent(torch.cat(pieces, dim=-1)))
+
+
+class Stillsong2Score:
+    """How well does a take fit a prompt? Replays the take under the given
+    style, lyric sheet and melody plan in one forward pass and returns the
+    log-probability of each frame's token. Output: JSON {"frames": n, "logp":
+    [...]}, also placed in the prompt's history as this node's `text`.
+
+    Two scores of one take, under two sheets or two plans, differ where the
+    take sings what only one of them asks for. Scores of two takes under one
+    prompt tell a take that follows the prompt from one that does not."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "clip": ("CLIP",),
+                "style": ("STRING", {"multiline": True}),
+                "lyrics": ("STRING", {"multiline": True}),
+                "abc": ("STRING", {"multiline": True, "default": ""}),
+                "mode": (["full", "melody"],),
+                "tokens": (TOKENS,),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("series",)
+    FUNCTION = "score"
+    CATEGORY = "conditioning/stillsong2"
+    OUTPUT_NODE = True
+
+    def score(self, clip, style, lyrics, abc, mode, tokens):
+        _require_whole(tokens, "Scoring")
+        ids = list(tokens["ids"])
+        if not abc.strip():
+            mode = "off"
+        encoded = clip.tokenize(style, lyrics=lyrics, cot=mode, seed=0, abc=abc, max_tokens=len(ids))
+        encoded["stillsong"] = {"replay": ids}
+        logp = clip.encode_from_tokens(encoded, return_dict=True)["stillsong_logp"]
+        series = json.dumps({"frames": len(ids), "logp": [round(v, 3) for v in logp.tolist()]}, separators=(",", ":"))
+        return {"ui": {"text": [series]}, "result": (series,)}
 
 
 class Stillsong2LoadTake:
@@ -252,6 +396,7 @@ class Stillsong2Align:
     OUTPUT_NODE = True
 
     def align(self, clip, style, abc, mode, tokens, lyrics_a, lyrics_b):
+        _require_whole(tokens, "Alignment")
         ids = list(tokens["ids"])
         if not abc.strip():
             mode = "off"
@@ -280,6 +425,7 @@ class Stillsong2SaveTake:
     OUTPUT_NODE = True
 
     def save(self, samples, tokens, filename_prefix):
+        _require_whole(tokens, "Saving")
         latent = samples["samples"]
         if latent.dim() != 3 or latent.shape[0] != 1:
             raise ValueError("Expected one YuE2 audio latent [1, 64, frames].")
@@ -292,6 +438,9 @@ class Stillsong2SaveTake:
 
 NODE_CLASS_MAPPINGS = {
     "Stillsong2Perform": Stillsong2Perform,
+    "Stillsong2Resing": Stillsong2Resing,
+    "Stillsong2ArrangeTake": Stillsong2ArrangeTake,
+    "Stillsong2Score": Stillsong2Score,
     "Stillsong2LoadTake": Stillsong2LoadTake,
     "Stillsong2HoldLatent": Stillsong2HoldLatent,
     "Stillsong2RestoreLatent": Stillsong2RestoreLatent,
@@ -301,6 +450,9 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Stillsong2Perform": "Stillsong 2 Perform",
+    "Stillsong2Resing": "Stillsong 2 Resing",
+    "Stillsong2ArrangeTake": "Stillsong 2 Arrange Take",
+    "Stillsong2Score": "Stillsong 2 Score",
     "Stillsong2LoadTake": "Stillsong 2 Load Take",
     "Stillsong2HoldLatent": "Stillsong 2 Hold Latent",
     "Stillsong2RestoreLatent": "Stillsong 2 Restore Latent",

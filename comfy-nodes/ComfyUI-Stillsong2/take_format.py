@@ -38,6 +38,32 @@ def parse_ranges(text, frames):
     return windows
 
 
+def parse_layout(text, frames):
+    """'0-2920,+340,2920-7694' -> [(0, 2920), 340, (2920, 7694)]: a new layout
+    for a take. A pair is a span of the take to keep (half-open, inside
+    [0, frames]; spans may come in any order); a number is a gap of that many
+    new frames."""
+    parts = []
+    for part in (p.strip() for p in str(text).split(",")):
+        if not part:
+            continue
+        if part.startswith("+"):
+            if not part[1:].isdigit() or int(part[1:]) < 1:
+                raise ValueError(f"Bad gap '{part}'; expected +frames.")
+            parts.append(int(part[1:]))
+            continue
+        pieces = part.split("-")
+        if len(pieces) != 2 or not pieces[0].isdigit() or not pieces[1].isdigit():
+            raise ValueError(f"Bad layout part '{part}'; expected start-end or +frames.")
+        start, stop = int(pieces[0]), int(pieces[1])
+        if not (0 <= start < stop <= frames):
+            raise ValueError(f"Span {start}-{stop} is outside the take (0-{frames}).")
+        parts.append((start, stop))
+    if not any(isinstance(part, tuple) for part in parts):
+        raise ValueError("A layout keeps at least one span of the take.")
+    return parts
+
+
 def window_mask(windows, frames):
     """Bool [frames]: True inside a window."""
     mask = torch.zeros((frames,), dtype=torch.bool)

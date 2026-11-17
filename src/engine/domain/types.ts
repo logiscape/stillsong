@@ -108,6 +108,12 @@ export interface Song {
   takePath?: string;
   /** On a "keep the rest" edit: the frame windows that were sung again. */
   editWindows?: FrameWindow[];
+  /**
+   * Where the plan's bars fall in this recording, as stored JSON (read it with
+   * `readBarGrid`). Found from the audio when the Song map first opens the
+   * song; absent until then, and for a recording the plan could not be placed in.
+   */
+  barGrid?: string;
   comfyPromptId?: string;
   /** Wall-clock job time (submit through harvest), recorded when the render finishes. */
   renderMs?: number;

@@ -10,6 +10,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import type { CreationStage, Engine, JobProgress } from '@engine/index';
 import type { Job, PhotoAsset, Song, SongSpec } from '@engine/domain/types';
 import { randomSeed } from '@engine/domain/types';
+import { b64ToBytes } from '@engine/base64';
+import { locateBars, pitchContent, type BarGrid } from '@engine/domain/barGrid';
+import type { SongMap } from '@engine/domain/songMap';
 import type { AppSettings } from '@engine/repo/settings';
 import { clearPaintSession } from './paintSession';
 import { routeForBoot } from './route';
@@ -478,6 +481,39 @@ export async function exportSong(song: Song): Promise<void> {
   });
   if (!dest) return;
   await invoke('files_export', { srcPath: song.outputPath, destPath: dest });
+}
+
+/** Pitch is read below 2 kHz, so the recording is decoded at a rate that just covers it. */
+const PITCH_RATE = 11025;
+
+/**
+ * Finds where the bars of a song's melody plan fall in its recording, from the
+ * audio, and stores the grid on the song. The MP3 is read from the library and
+ * decoded here in the web view; nothing leaves the PC and the studio is not
+ * needed. Null when the song has no recording, the audio cannot be decoded,
+ * or it does not follow the plan closely enough to be placed.
+ */
+export async function locateSongBars(song: Song, map: SongMap): Promise<BarGrid | null> {
+  try {
+    const b64 = await getEngine().songAudio(song);
+    if (!b64) return null;
+    const bytes = b64ToBytes(b64);
+    const decoded = await new OfflineAudioContext(1, 1, PITCH_RATE).decodeAudioData(bytes.buffer as ArrayBuffer);
+    // Both channels as one.
+    const pcm = new Float32Array(decoded.length);
+    for (let c = 0; c < decoded.numberOfChannels; c++) {
+      const channel = decoded.getChannelData(c);
+      for (let i = 0; i < pcm.length; i++) pcm[i] += channel[i] / decoded.numberOfChannels;
+    }
+    const grid = locateBars(map, pitchContent(pcm, decoded.sampleRate));
+    if (!grid) return null;
+    await getEngine().saveBarGrid(song.id, grid);
+    await refreshLists();
+    return grid;
+  } catch {
+    // The map keeps its estimate.
+    return null;
+  }
 }
 
 export async function renameSong(song: Song, title: string): Promise<void> {

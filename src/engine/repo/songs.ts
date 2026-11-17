@@ -23,6 +23,7 @@ interface Row {
   plan_abc: string | null;
   take_path: string | null;
   edit_windows: string | null;
+  bar_grid: string | null;
 }
 
 /** What a finished render adds to its song row. */
@@ -73,6 +74,7 @@ function rowToSong(r: Row): Song {
     planAbc: r.plan_abc ?? undefined,
     takePath: r.take_path ?? undefined,
     editWindows: parseWindows(r.edit_windows),
+    barGrid: r.bar_grid ?? undefined,
   };
 }
 
@@ -164,6 +166,11 @@ export class SongRepo {
         out.planAbc ?? null, out.takePath ?? null, out.editWindows?.length ? JSON.stringify(out.editWindows) : null, id,
       ],
     );
+  }
+
+  /** Stores where the plan's bars fall in the song's recording (JSON of a BarGrid). */
+  async setBarGrid(id: string, json: string): Promise<void> {
+    await this.db.execute(`UPDATE song SET bar_grid = ? WHERE id = ?`, [json, id]);
   }
 
   async setTitle(id: string, title: string): Promise<void> {

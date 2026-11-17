@@ -6,8 +6,9 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Song } from '@engine/domain/types';
+import { gridTiming, readBarGrid } from '@engine/domain/barGrid';
 import { buildSongMap, evenTiming, musicBoxEvents, phraseAt, recordingTiming, type SongMap } from '@engine/domain/songMap';
-import { navigate, pausePlayback, playSongFrom, playbackTime, seek, thumbSrc, useAppState } from '@state/store';
+import { locateSongBars, navigate, pausePlayback, playSongFrom, playbackTime, seek, thumbSrc, useAppState } from '@state/store';
 import { Button } from '@ui/ds/Button';
 import { Icon } from '@ui/ds/Icon';
 import { IconButton } from '@ui/ds/IconButton';
@@ -84,18 +85,44 @@ function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElemen
   const [boxPlaying, setBoxPlaying] = useState(false);
   const playing = source === 'recording' ? recordingPlaying : boxPlaying;
 
-  // The music box plays the plan at its written tempo; where the bars fall in
-  // the recording is an estimate from the same tempo.
+  // The music box plays the plan at its written tempo. Where the bars fall in
+  // the recording is measured from its audio (the song's bar grid); until that
+  // is known, and for a recording it cannot place, it is an estimate from the
+  // plan's tempo.
+  const grid = useMemo(() => readBarGrid(song.barGrid, map.phrases.length), [song.barGrid, map]);
   const boxTotal = map.bars * map.ctx.secPerBar;
   const recordingTotal = song.actualSec || (loaded && s.playback!.durationSec) || boxTotal;
   const timings = useMemo(
-    () => ({ recording: recordingTiming(map, recordingTotal, !!song.hitCeiling), box: evenTiming(map.bars, boxTotal) }),
-    [map, recordingTotal, song.hitCeiling, boxTotal],
+    () => ({
+      recording: grid ? gridTiming(map, grid, recordingTotal) : recordingTiming(map, recordingTotal, !!song.hitCeiling),
+      box: evenTiming(map.bars, boxTotal),
+    }),
+    [map, grid, recordingTotal, song.hitCeiling, boxTotal],
   );
   const timing = timings[source];
-  // A recording that ran out of room stops partway through the plan: its
-  // playhead goes no further than that. The music box plays the whole plan.
+  // A recording that stops partway through the plan: its playhead goes no
+  // further than that. The music box plays the whole plan.
   const cutShort = timings.recording.lastBar < map.bars;
+
+  // The first time a song's map is opened, its bars are looked for in the
+  // recording (about half a second of work, once per song; the grid is stored).
+  // Held back a moment so the map is on screen first.
+  const [locating, setLocating] = useState(false);
+  const looked = useRef(false);
+  useEffect(() => {
+    if (grid || !hasRecording || looked.current) return;
+    looked.current = true;
+    let gone = false;
+    const timer = window.setTimeout(() => {
+      setLocating(true);
+      void locateSongBars(song, map).finally(() => { if (!gone) setLocating(false); });
+    }, 400);
+    return () => {
+      gone = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid, hasRecording]);
 
   // The transport position, in bars. A ref: it moves every frame while playing.
   const pos = useRef<number | null>(null);
@@ -252,9 +279,11 @@ function MapView({ song, map }: { song: Song; map: SongMap }): React.ReactElemen
       <PhrasePanel map={map} timing={timing} now={now} cursorRef={cursorRef} onJump={jump} />
 
       <p style={{ margin: 0, font: 'var(--ui-sm)', color: 'var(--ink-3)', maxWidth: '72ch' }}>
-        {source === 'recording' && cutShort && `This recording ran out of room at ${fmtDuration(timing.total)}, before the end of its melody plan. The dimmed part was never performed; the music box still plays it. `}
+        {source === 'recording' && cutShort && `This recording stops at ${fmtDuration(timing.total)}, before the end of its melody plan. The dimmed part was never performed; the music box still plays it. `}
         {source === 'recording'
-          ? 'The map places each bar by the tempo written in the melody plan, so the playhead can sit a little off what you hear. Words are placed by syllable count, which is also an estimate.'
+          ? grid
+            ? 'The map is lined up with the recording by matching the notes and chords of the melody plan to what is heard. Words are placed by syllable count, which is an estimate.'
+            : `${locating ? 'Lining the map up with the recording. Until then, the' : 'The'} map places each bar by the tempo written in the melody plan, so the playhead can sit a little off what you hear. Words are placed by syllable count, which is also an estimate.`
           : 'The music box plays the melody plan on its own: the tune and the chords, without the performance. Words are placed by syllable count, which is an estimate.'}
       </p>
     </div>

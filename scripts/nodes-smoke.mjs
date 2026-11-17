@@ -13,6 +13,13 @@
 //   T3  a partial re-performance keeps tokens and latent bit-equal outside the
 //       window, changes them inside, and keeps the length
 //   T4  the re-performed take no longer sings the old words
+//   T5  singing a window alone (Stillsong2Resing) gives the tokens the full
+//       re-performance gives (the time it takes is reported, not judged); it
+//       works with no plan, and at the end of a take, where the model wants
+//       to stop
+//   T6  scoring a take under two sheets reproduces the alignment series
+//   T7  a take laid out anew: frames taken out, and a gap opened and sung;
+//       a gap that was never sung is refused, and so is a layout too long to perform
 //
 // Run it after any change to the package and as part of the ComfyUI bump ritual.
 
@@ -24,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const urlArg = process.argv.indexOf('--url');
 const URL_ = urlArg > 0 ? process.argv[urlArg + 1] : (process.env.STILLSONG2_COMFY_URL ?? 'http://127.0.0.1:8000');
-const NODES = ['Stillsong2Perform', 'Stillsong2LoadTake', 'Stillsong2HoldLatent', 'Stillsong2RestoreLatent', 'Stillsong2Align', 'Stillsong2SaveTake'];
+const NODES = ['Stillsong2Perform', 'Stillsong2Resing', 'Stillsong2ArrangeTake', 'Stillsong2Score', 'Stillsong2LoadTake', 'Stillsong2HoldLatent', 'Stillsong2RestoreLatent', 'Stillsong2Align', 'Stillsong2SaveTake'];
 const PREFIX = 'stillsong2-smoke';
 
 const song = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples', 'examples.json'), 'utf8')).songs
@@ -180,6 +187,57 @@ function editGraph(takeName, redo) {
   };
 }
 
+// Tokens only: the windows sung anew, saved beside the latent they came with.
+function resingGraph(takeName, { lyrics = spec.lyrics, abc = song.abc, seed: s = seed, redo, name, ...settings }) {
+  return {
+    ckpt,
+    source: { class_type: 'Stillsong2LoadTake', inputs: { take: takeName } },
+    sing: { class_type: 'Stillsong2Resing', inputs: { ...music(lyrics), ...settings, abc, seed: s, tokens: ['source', 0], redo } },
+    take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['source', 1], tokens: ['sing', 0], filename_prefix: `${PREFIX}/${name}` } },
+  };
+}
+
+function scoreGraph(takeName, sheets) {
+  const graph = { ckpt, source: { class_type: 'Stillsong2LoadTake', inputs: { take: takeName } } };
+  sheets.forEach((lyrics, i) => {
+    graph[`score${i}`] = { class_type: 'Stillsong2Score', inputs: { clip: ['ckpt', 1], style: spec.caption, lyrics, abc: song.abc, mode: 'full', tokens: ['source', 0] } };
+  });
+  return graph;
+}
+
+const arranged = (takeName, layout) => ({
+  ckpt,
+  source: { class_type: 'Stillsong2LoadTake', inputs: { take: takeName } },
+  arrange: { class_type: 'Stillsong2ArrangeTake', inputs: { tokens: ['source', 0], samples: ['source', 1], layout } },
+});
+
+// A gap opened in the take, sung, and performed: the quick singing first, then
+// the chosen tokens performed in full with everything outside the gap held.
+function gapGraph(takeName, layout, redo) {
+  return {
+    ...arranged(takeName, layout),
+    sing: { class_type: 'Stillsong2Resing', inputs: { ...music(spec.lyrics), seed: 7, tokens: ['arrange', 0], redo } },
+    perform: { class_type: 'Stillsong2Perform', inputs: { ...music(spec.lyrics), tokens: ['sing', 0], redo: '' } },
+    hold: { class_type: 'Stillsong2HoldLatent', inputs: { samples: ['arrange', 1], redo } },
+    ...tail(['hold', 0], ['perform', 0]),
+    restore: { class_type: 'Stillsong2RestoreLatent', inputs: { samples: ['sample', 0], take: ['arrange', 1], redo } },
+    take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['restore', 0], tokens: ['perform', 2], filename_prefix: `${PREFIX}/gap` } },
+    ...saveMp3(['restore', 0], 'gap'),
+  };
+}
+
+async function refused(graph, pattern) {
+  try {
+    await run(graph);
+  } catch (err) {
+    return pattern.test(String(err.message));
+  }
+  return false;
+}
+
+/** Row c of a take's latent, frames [from, to), as raw bytes. */
+const latentRow = (t, c, from, to) => t.latent.subarray((c * t.codes.length + from) * 4, (c * t.codes.length + to) * 4);
+
 const series = (outputs) => JSON.parse(outputs.align.text[0]);
 const smooth = (drop, i, k = 13) => {
   let sum = 0;
@@ -267,6 +325,93 @@ check('no old words are left', leftover > -0.25, `lowest ${leftover.toFixed(3)}`
 let gain = 0;
 for (let i = WINDOW[0]; i < WINDOW[1]; i++) gain += after[i];
 check('the window fits the new sheet better', gain > 10, `+${gain.toFixed(1)} nats`);
+
+console.log('T5 singing a window alone');
+const sung = await run(resingGraph(tempName, { lyrics: edited, redo, name: 'resing' }));
+const sungTake = parseTake(await view(fileOf(sung.outputs, 'take', 'stillsong_take')));
+check('it sings the tokens the full re-performance sings', sungTake.codes.length === frames && sungTake.codes.every((v, i) => v === editTake.codes[i]));
+// A measurement, not a pass condition: it is wall time, with the queue and this script's one-second polling in it.
+console.log(`  note ${sung.seconds.toFixed(1)} s for ${WINDOW[1] - WINDOW[0]} frames at ${(WINDOW[0] / 25).toFixed(0)} s (a render of this song: ${capture.seconds.toFixed(0)} s)`);
+const noPlan = await run(resingGraph(tempName, { abc: '', seed: 5, redo: '0-60', name: 'resing-noplan' }));
+const noPlanTake = parseTake(await view(fileOf(noPlan.outputs, 'take', 'stillsong_take')));
+check('with no plan it keeps the length and everything after the window', noPlanTake.codes.length === frames && noPlanTake.codes.subarray(60).every((v, i) => v === take.codes[60 + i]));
+check('with no plan the window is sung anew', noPlanTake.codes.subarray(0, 60).some((v, i) => v !== take.codes[i]));
+
+// Near a song's end the model wants to stop, and a re-sung window may not. With
+// the end token taken out after the sampling filters, the second of these left
+// a step nothing to sample and took the studio down (2026-11-16); the third
+// keeps only the likeliest token, which is the end token as soon as it leads.
+for (const [label, settings] of [
+  ['the last 12 s, seed 1', { seed: 1, redo: `${frames - 300}-${frames}` }],
+  ['the last 12 s, seed 3', { seed: 3, redo: `${frames - 300}-${frames}` }],
+  ['the last 2 s, only the likeliest token', { seed: 1, redo: `${frames - 50}-${frames}`, top_k: 1 }],
+]) {
+  const ending = await run(resingGraph(tempName, { ...settings, name: 'resing-end' }));
+  const endTake = parseTake(await view(fileOf(ending.outputs, 'take', 'stillsong_take')));
+  const from = Number(settings.redo.split('-')[0]);
+  const keptBefore = endTake.codes.length === frames && endTake.codes.subarray(0, from).every((v, i) => v === take.codes[i]);
+  const resung = endTake.codes.subarray(from).some((v, i) => v !== take.codes[from + i]);
+  check(`the end of the take can be sung again: ${label}`, keptBefore && resung, `${endTake.codes.length} frames`);
+}
+
+console.log('T6 scoring');
+const scored = await run(scoreGraph(tempName, [spec.lyrics, edited]));
+const logp = [0, 1].map((i) => JSON.parse(scored.outputs[`score${i}`].text[0]));
+check('one value per frame, all finite', logp.every((s) => s.frames === frames && s.logp.length === frames && s.logp.every((v) => Number.isFinite(v) && v <= 0)));
+let apart = 0;
+for (let i = 0; i < frames; i++) apart = Math.max(apart, Math.abs(logp[1].logp[i] - logp[0].logp[i] - drop[i]));
+check('two scores differ by the alignment series', apart < 0.01, `largest difference ${apart.toFixed(4)}; two replays ${scored.seconds.toFixed(1)} s`);
+
+console.log('T7 a take laid out anew');
+const CUT = [1000, 1500];
+const shorter = await run({
+  ...arranged(tempName, `0-${CUT[0]},${CUT[1]}-${frames}`),
+  take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['arrange', 1], tokens: ['arrange', 0], filename_prefix: `${PREFIX}/shorter` } },
+});
+const shorterTake = parseTake(await view(fileOf(shorter.outputs, 'take', 'stillsong_take')));
+const cutLength = CUT[1] - CUT[0];
+let cutRight = shorterTake.codes.length === frames - cutLength;
+for (let i = 0; cutRight && i < shorterTake.codes.length; i++) if (shorterTake.codes[i] !== take.codes[i < CUT[0] ? i : i + cutLength]) cutRight = false;
+for (let c = 0; cutRight && c < 64; c++) {
+  if (!latentRow(shorterTake, c, 0, CUT[0]).equals(latentRow(take, c, 0, CUT[0]))) cutRight = false;
+  if (!latentRow(shorterTake, c, CUT[0], frames - cutLength).equals(latentRow(take, c, CUT[1], frames))) cutRight = false;
+}
+check('frames taken out: the rest joins up, tokens and latent', cutRight, `${shorterTake.codes.length} frames`);
+
+const GAP = [WINDOW[1], WINDOW[1] + 100];
+const layout = `0-${GAP[0]},+${GAP[1] - GAP[0]},${GAP[0]}-${frames}`;
+const gapRedo = `${GAP[0]}-${GAP[1]}`;
+check('a take with an unsung gap cannot be saved', await refused({
+  ...arranged(tempName, layout),
+  take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['arrange', 1], tokens: ['arrange', 0], filename_prefix: `${PREFIX}/unsung` } },
+}, /gaps that were never sung/));
+check('nor performed with the gap outside the redo windows', await refused({
+  ...arranged(tempName, layout),
+  sing: { class_type: 'Stillsong2Resing', inputs: { ...music(spec.lyrics), tokens: ['arrange', 0], redo: `${GAP[0] + 10}-${GAP[1]}` } },
+  take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['arrange', 1], tokens: ['sing', 0], filename_prefix: `${PREFIX}/unsung` } },
+}, /holds no music/));
+check('nor is a layout too long to perform built at all', await refused({
+  ...arranged(tempName, `0-10,+${10 ** 9}`),
+  take: { class_type: 'Stillsong2SaveTake', inputs: { samples: ['arrange', 1], tokens: ['arrange', 0], filename_prefix: `${PREFIX}/unsung` } },
+}, /the studio can hold/));
+const gap = await run(gapGraph(tempName, layout, gapRedo));
+const gapTake = parseTake(await view(fileOf(gap.outputs, 'take', 'stillsong_take')));
+const gapMp3 = await view(fileOf(gap.outputs, 'save', 'audio'));
+const added = GAP[1] - GAP[0];
+check('the take is longer by the gap', gapTake.codes.length === frames + added && gapTake.latentShape[1] === frames + added);
+let around = gapTake.codes.length === frames + added;
+for (let i = 0; around && i < frames; i++) if (gapTake.codes[i < GAP[0] ? i : i + added] !== take.codes[i]) around = false;
+check('tokens before and after the gap are kept', around);
+let latentAround = gapTake.codes.length === frames + added;
+let gapFilled = false;
+for (let c = 0; latentAround && c < 64; c++) {
+  if (!latentRow(gapTake, c, 0, GAP[0]).equals(latentRow(take, c, 0, GAP[0]))) latentAround = false;
+  if (!latentRow(gapTake, c, GAP[1], frames + added).equals(latentRow(take, c, GAP[0], frames))) latentAround = false;
+  if (latentRow(gapTake, c, GAP[0], GAP[1]).some((b) => b !== 0)) gapFilled = true;
+}
+check('the latent before and after the gap is bit-equal', latentAround);
+check('the gap holds new music', gapFilled && new Set(gapTake.codes.subarray(GAP[0], GAP[1])).size > 10, `${new Set(gapTake.codes.subarray(GAP[0], GAP[1])).size} different tokens in ${added} frames`);
+check('it was performed to audio', gapMp3.length > 100000, `${gap.seconds.toFixed(0)} s for the whole pass`);
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
