@@ -100,7 +100,9 @@ describe('stepNote', () => {
       })));
       expect(moved, s.spec.title).toBeGreaterThan(1000);
     }
-  });
+    // Every note of three songs, four ways, each a plan read twice: seconds of work, and on a
+    // CI runner sharing its cores with the other test files it passed the default 5 s (8.3 s).
+  }, 60_000);
 
   it('takes a second press on a note tied across a bar line', () => {
     // "Where the Old Gods Stood" sings a D tied over a bar line; two steps down it becomes "B,".
